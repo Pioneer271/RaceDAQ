@@ -75,7 +75,7 @@ GenerateClassCluster=0
 DocumentUniqueId=WZBRMVGP
 
 [Document3]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\connector.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\connector.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -92,7 +92,7 @@ GenerateClassCluster=0
 DocumentUniqueId=WVYMYTOP
 
 [Document4]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\custom-case.PcbLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\custom-case.PcbLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -109,7 +109,7 @@ GenerateClassCluster=0
 DocumentUniqueId=WAIRJKRU
 
 [Document5]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\diode.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\diode.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -126,7 +126,7 @@ GenerateClassCluster=0
 DocumentUniqueId=LIXHOGJD
 
 [Document6]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\electromechanics.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\electromechanics.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -143,7 +143,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document7]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-adc-dac-dds.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-adc-dac-dds.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -160,7 +160,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document8]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-amplifier.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-amplifier.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -177,7 +177,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document9]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-comparator.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-comparator.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -194,7 +194,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document10]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-fpga.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-fpga.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -211,7 +211,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document11]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-gate-driver.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-gate-driver.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -228,7 +228,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document12]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-interface.SchLib
+DocumentPath=..\..\Librery Altium\E73-2G4M04S1BX.PcbLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -242,10 +242,10 @@ ClassGenCCAutoRoomEnabled=1
 ClassGenNCAutoScope=None
 DItemRevisionGUID=
 GenerateClassCluster=0
-DocumentUniqueId=
+DocumentUniqueId=TGMTXOMT
 
 [Document13]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-logic.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-interface.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -262,7 +262,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document14]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-mcu.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-logic.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -279,7 +279,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document15]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-memory.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-mcu.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -296,41 +296,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document16]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-power-module.SchLib
-AnnotationEnabled=1
-AnnotateStartValue=1
-AnnotationIndexControlEnabled=0
-AnnotateSuffix=
-AnnotateScope=All
-AnnotateOrder=-1
-DoLibraryUpdate=1
-DoDatabaseUpdate=1
-ClassGenCCAutoEnabled=1
-ClassGenCCAutoRoomEnabled=1
-ClassGenNCAutoScope=None
-DItemRevisionGUID=
-GenerateClassCluster=0
-DocumentUniqueId=HXMGVTEN
-
-[Document17]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-power-supply.SchLib
-AnnotationEnabled=1
-AnnotateStartValue=1
-AnnotationIndexControlEnabled=0
-AnnotateSuffix=
-AnnotateScope=All
-AnnotateOrder=-1
-DoLibraryUpdate=1
-DoDatabaseUpdate=1
-ClassGenCCAutoEnabled=1
-ClassGenCCAutoRoomEnabled=1
-ClassGenNCAutoScope=None
-DItemRevisionGUID=
-GenerateClassCluster=0
-DocumentUniqueId=GBZYFAXF
-
-[Document18]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\ic-sensor.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-memory.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -346,8 +312,42 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=
 
+[Document17]
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-power-module.SchLib
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=-1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=1
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=HXMGVTEN
+
+[Document18]
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-power-supply.SchLib
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=-1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=1
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=GBZYFAXF
+
 [Document19]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\inductor.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-sensor.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -364,24 +364,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document20]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\module.SchLib
-AnnotationEnabled=1
-AnnotateStartValue=1
-AnnotationIndexControlEnabled=0
-AnnotateSuffix=
-AnnotateScope=All
-AnnotateOrder=-1
-DoLibraryUpdate=1
-DoDatabaseUpdate=1
-ClassGenCCAutoEnabled=1
-ClassGenCCAutoRoomEnabled=1
-ClassGenNCAutoScope=None
-DItemRevisionGUID=
-GenerateClassCluster=0
-DocumentUniqueId=CCEAREFH
-
-[Document21]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\optoisolator.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\inductor.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -397,8 +380,25 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=
 
+[Document21]
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\module.SchLib
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=-1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=1
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=CCEAREFH
+
 [Document22]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\oscilator.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\optoisolator.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -415,7 +415,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document23]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\resistor.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\oscilator.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -432,24 +432,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document24]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\standard-case.PcbLib
-AnnotationEnabled=1
-AnnotateStartValue=1
-AnnotationIndexControlEnabled=0
-AnnotateSuffix=
-AnnotateScope=All
-AnnotateOrder=-1
-DoLibraryUpdate=1
-DoDatabaseUpdate=1
-ClassGenCCAutoEnabled=1
-ClassGenCCAutoRoomEnabled=1
-ClassGenNCAutoScope=None
-DItemRevisionGUID=
-GenerateClassCluster=0
-DocumentUniqueId=KABGVIMN
-
-[Document25]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\transformer.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\resistor.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -465,8 +448,25 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=
 
+[Document25]
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\standard-case.PcbLib
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=-1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=1
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=KABGVIMN
+
 [Document26]
-DocumentPath=..\Librery Altium\AltiumLibrary-master\library\transistor.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\transformer.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -483,7 +483,24 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [Document27]
-DocumentPath=..\Librery Altium\Fuse.SchLib
+DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\transistor.SchLib
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=-1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=1
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=
+
+[Document28]
+DocumentPath=..\..\Librery Altium\Fuse.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -499,8 +516,8 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=BPJEHDYZ
 
-[Document28]
-DocumentPath=..\Librery Altium\Geksan_my.PcbLib
+[Document29]
+DocumentPath=..\..\Librery Altium\Geksan_my.PcbLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -516,8 +533,8 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=UDLJMUXO
 
-[Document29]
-DocumentPath=..\Librery Altium\Geksan_my.SCHLIB
+[Document30]
+DocumentPath=..\..\Librery Altium\Geksan_my.SCHLIB
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -533,8 +550,8 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=
 
-[Document30]
-DocumentPath=..\Librery Altium\Libraries for Altium\SCH\Diodes.SchLib
+[Document31]
+DocumentPath=..\..\Librery Altium\Libraries for Altium\SCH\Diodes.SchLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -550,8 +567,8 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=IQIIGUHR
 
-[Document31]
-DocumentPath=RaceDAQ_IN_OUT.SchDoc
+[Document32]
+DocumentPath=..\RaceDAQ_IN_OUT.SchDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -567,8 +584,8 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=UOQDEBLF
 
-[Document32]
-DocumentPath=..\tlib\tlib.DbLib
+[Document33]
+DocumentPath=..\..\tlib\tlib.DbLib
 AnnotationEnabled=1
 AnnotateStartValue=1
 AnnotationIndexControlEnabled=0
@@ -584,7 +601,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=
 
-[Document33]
+[Document34]
 DocumentPath=RaceDAQ_ANALOG.SchDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -601,7 +618,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=RSRNOKDT
 
-[Document34]
+[Document35]
 DocumentPath=RaceDAQ_MCU.SchDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -618,12 +635,29 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=MTFUJRFT
 
+[Document36]
+DocumentPath=..\..\Librery Altium\Libraries for Altium\BD component.DbLib
+AnnotationEnabled=1
+AnnotateStartValue=1
+AnnotationIndexControlEnabled=0
+AnnotateSuffix=
+AnnotateScope=All
+AnnotateOrder=-1
+DoLibraryUpdate=1
+DoDatabaseUpdate=1
+ClassGenCCAutoEnabled=1
+ClassGenCCAutoRoomEnabled=1
+ClassGenNCAutoScope=None
+DItemRevisionGUID=
+GenerateClassCluster=0
+DocumentUniqueId=
+
 [GeneratedDocument1]
-DocumentPath=Project Outputs for RaceDAQ 0.1.0\Design Rule Check - PCB1.html
+DocumentPath=..\Project Outputs for RaceDAQ 0.1.0\Design Rule Check - PCB1.html
 DItemRevisionGUID=
 
 [GeneratedDocument2]
-DocumentPath=Project Outputs for RaceLine_s\Design Rule Check - PCB1.html
+DocumentPath=..\Project Outputs for RaceLine_s\Design Rule Check - PCB1.html
 DItemRevisionGUID=
 
 [Configuration1]
@@ -1551,9 +1585,9 @@ UpdateVariants=1
 UpdateToLatestRevision=1
 PartTypes=0
 ComponentLibIdentifierKind0=Library Name And Type
-ComponentLibraryIdentifier0=E73-2G4M04S1B.SchLib
-ComponentDesignItemID0=E73-2G4M04S1B
-ComponentSymbolReference0=E73-2G4M04S1B
+ComponentLibraryIdentifier0=module.SchLib
+ComponentDesignItemID0=MCP2515_Mod
+ComponentSymbolReference0=MCP2515_Mod
 ComponentUpdate0=1
 ComponentIsDeviceSheet0=0
 FullReplace=1
@@ -1569,32 +1603,18 @@ RemoveParameters=0
 AddModels=1
 RemoveModels=1
 UpdateCurrentModels=1
-ParameterName0=Availability
+ParameterName0=Comment
 ParameterUpdate0=1
-ParameterName1=Comment
+ParameterName1=Component Kind
 ParameterUpdate1=1
-ParameterName2=Component Kind
+ParameterName2=Description
 ParameterUpdate2=1
-ParameterName3=Description
+ParameterName3=Library Reference
 ParameterUpdate3=1
-ParameterName4=Library Reference
-ParameterUpdate4=1
-ParameterName5=MF
-ParameterUpdate5=1
-ParameterName6=MP
-ParameterUpdate6=1
-ParameterName7=Package
-ParameterUpdate7=1
-ParameterName8=Price
-ParameterUpdate8=1
-ParameterName9=SnapEDA_Link
-ParameterUpdate9=1
-ParameterName10=Value
-ParameterUpdate10=1
 ModelTypeGroup0=PCBLIB
 ModelTypeUpdate0=1
 ModelType0=PCBLIB
-ModelName0=XCVR_E73-2G4M04S1B
+ModelName0=MDL:MCP2515
 ModelUpdate0=1
 
 [DatabaseUpdateOptions]
