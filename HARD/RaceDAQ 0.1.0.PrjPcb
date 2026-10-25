@@ -242,7 +242,7 @@ ClassGenCCAutoRoomEnabled=1
 ClassGenNCAutoScope=None
 DItemRevisionGUID=
 GenerateClassCluster=0
-DocumentUniqueId=TGMTXOMT
+DocumentUniqueId=GLXMPRBQ
 
 [Document13]
 DocumentPath=..\..\Librery Altium\AltiumLibrary-master\library\ic-interface.SchLib
@@ -568,23 +568,6 @@ GenerateClassCluster=0
 DocumentUniqueId=IQIIGUHR
 
 [Document32]
-DocumentPath=..\RaceDAQ_IN_OUT.SchDoc
-AnnotationEnabled=1
-AnnotateStartValue=1
-AnnotationIndexControlEnabled=0
-AnnotateSuffix=
-AnnotateScope=All
-AnnotateOrder=4
-DoLibraryUpdate=1
-DoDatabaseUpdate=1
-ClassGenCCAutoEnabled=1
-ClassGenCCAutoRoomEnabled=1
-ClassGenNCAutoScope=None
-DItemRevisionGUID=
-GenerateClassCluster=0
-DocumentUniqueId=UOQDEBLF
-
-[Document33]
 DocumentPath=..\..\tlib\tlib.DbLib
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -601,7 +584,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=
 
-[Document34]
+[Document33]
 DocumentPath=RaceDAQ_ANALOG.SchDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -618,7 +601,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=RSRNOKDT
 
-[Document35]
+[Document34]
 DocumentPath=RaceDAQ_MCU.SchDoc
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -635,7 +618,7 @@ DItemRevisionGUID=
 GenerateClassCluster=0
 DocumentUniqueId=MTFUJRFT
 
-[Document36]
+[Document35]
 DocumentPath=..\..\Librery Altium\Libraries for Altium\BD component.DbLib
 AnnotationEnabled=1
 AnnotateStartValue=1
@@ -653,11 +636,7 @@ GenerateClassCluster=0
 DocumentUniqueId=
 
 [GeneratedDocument1]
-DocumentPath=..\Project Outputs for RaceDAQ 0.1.0\Design Rule Check - PCB1.html
-DItemRevisionGUID=
-
-[GeneratedDocument2]
-DocumentPath=..\Project Outputs for RaceLine_s\Design Rule Check - PCB1.html
+DocumentPath=Project Outputs for RaceDAQ 0.1.0\Design Rule Check - PCB1.html
 DItemRevisionGUID=
 
 [Configuration1]
