@@ -9,37 +9,43 @@ import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
+import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.imePadding
+import androidx.compose.foundation.layout.systemBarsPadding
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.darkColorScheme
 import androidx.compose.runtime.*
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 
-
-// Хранилище калибровок аналоговых датчиков в памяти планшета
 object SensorProfileStorage {
     private const val PREFS_NAME = "racedaq_sensor_profiles"
 
     fun loadProfile(context: Context, prefix: String, defaultProfile: AnalogSensorProfile): AnalogSensorProfile {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return AnalogSensorProfile(
-            name = prefs.getString("${prefix}_name", defaultProfile.name) ?: defaultProfile.name,
-            unit = prefs.getString("${prefix}_unit", defaultProfile.unit) ?: defaultProfile.unit,
-            v1Mv = prefs.getInt("${prefix}_v1", defaultProfile.v1Mv),
-            val1 = prefs.getFloat("${prefix}_val1", defaultProfile.val1),
-            v2Mv = prefs.getInt("${prefix}_v2", defaultProfile.v2Mv),
-            val2 = prefs.getFloat("${prefix}_val2", defaultProfile.val2)
+            name = prefs.getString("\${prefix}_name", defaultProfile.name) ?: defaultProfile.name,
+            unit = prefs.getString("\${prefix}_unit", defaultProfile.unit) ?: defaultProfile.unit,
+            v1Mv = prefs.getInt("\${prefix}_v1", defaultProfile.v1Mv),
+            val1 = prefs.getFloat("\${prefix}_val1", defaultProfile.val1),
+            v2Mv = prefs.getInt("\${prefix}_v2", defaultProfile.v2Mv),
+            val2 = prefs.getFloat("\${prefix}_val2", defaultProfile.val2)
         )
     }
 
     fun saveProfile(context: Context, prefix: String, profile: AnalogSensorProfile) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-            .putString("${prefix}_name", profile.name)
-            .putString("${prefix}_unit", profile.unit)
-            .putInt("${prefix}_v1", profile.v1Mv)
-            .putFloat("${prefix}_val1", profile.val1)
-            .putInt("${prefix}_v2", profile.v2Mv)
-            .putFloat("${prefix}_val2", profile.val2)
+            .putString("\${prefix}_name", profile.name)
+            .putString("\${prefix}_unit", profile.unit)
+            .putInt("\${prefix}_v1", profile.v1Mv)
+            .putFloat("\${prefix}_val1", profile.val1)
+            .putInt("\${prefix}_v2", profile.v2Mv)
+            .putFloat("\${prefix}_val2", profile.val2)
             .apply()
     }
 }
@@ -49,19 +55,26 @@ class MainActivity : ComponentActivity() {
     private lateinit var bleManager: RaceDaqBleManager
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        enableEdgeToEdge()
         super.onCreate(savedInstanceState)
 
-        // Не гасить экран планшета во время работы приборки
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-
         bleManager = RaceDaqBleManager(applicationContext)
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
-                RaceDaqApp(
-                    context = this,
-                    bleManager = bleManager
-                )
+                Box(
+                    modifier = Modifier
+                        .fillMaxSize()
+                        .background(Color(0xFF0D0F12))
+                        .systemBarsPadding()
+                        .imePadding()
+                ) {
+                    RaceDaqApp(
+                        context = this@MainActivity,
+                        bleManager = bleManager
+                    )
+                }
             }
         }
     }
@@ -72,7 +85,6 @@ private fun RaceDaqApp(
     context: Context,
     bleManager: RaceDaqBleManager
 ) {
-    // Запрос разрешений BLE при старте
     val requiredPermissions = remember {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             arrayOf(
@@ -105,7 +117,6 @@ private fun RaceDaqApp(
         }
     }
 
-    // Состояния экранов и профилей датчиков
     var showConfig by remember { mutableStateOf(false) }
 
     var ain1Profile by remember {

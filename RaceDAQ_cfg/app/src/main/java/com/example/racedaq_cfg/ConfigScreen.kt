@@ -17,6 +17,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 
@@ -37,16 +38,21 @@ fun ConfigScreen(
     var draftAin2 by remember(ain2Profile) { mutableStateOf(ain2Profile) }
     var selectedTab by remember { mutableIntStateOf(0) }
 
-    val tabs = listOf("1. ВХОДЫ", "2. ВЫХОДЫ", "3. CAN-ШИНА", "4. СИСТЕМА")
-
     BoxWithConstraints(
         modifier = Modifier
             .fillMaxSize()
             .background(Color(0xFF0D0F12))
     ) {
         val isPhone = maxWidth < 700.dp
+        val isNarrowPhone = maxWidth < 420.dp
         val pad = if (isPhone) 8.dp else 16.dp
         val gap = if (isPhone) 8.dp else 12.dp
+
+        val tabs = if (isNarrowPhone) {
+            listOf("1. ВХОДЫ", "2. ВЫХОДЫ", "3. CAN", "4. СИСТЕМА")
+        } else {
+            listOf("1. ВХОДЫ", "2. ВЫХОДЫ", "3. CAN-ШИНА", "4. СИСТЕМА")
+        }
 
         Column(
             modifier = Modifier
@@ -101,7 +107,7 @@ fun ConfigScreen(
             // ВКЛАДКИ
             Row(
                 modifier = Modifier.fillMaxWidth(),
-                horizontalArrangement = Arrangement.spacedBy(6.dp)
+                horizontalArrangement = Arrangement.spacedBy(4.dp)
             ) {
                 tabs.forEachIndexed { index, title ->
                     val isSelected = selectedTab == index
@@ -111,15 +117,17 @@ fun ConfigScreen(
                             .clip(RoundedCornerShape(8.dp))
                             .background(if (isSelected) Color(0xFF0288D1) else Color(0xFF1A1E24))
                             .clickable { selectedTab = index }
-                            .padding(vertical = if (isPhone) 10.dp else 12.dp),
+                            .padding(vertical = if (isPhone) 10.dp else 12.dp, horizontal = 4.dp),
                         contentAlignment = Alignment.Center
                     ) {
                         Text(
                             text = title,
                             color = Color.White,
                             fontWeight = if (isSelected) FontWeight.Bold else FontWeight.Normal,
-                            fontSize = if (isPhone) 12.sp else 14.sp,
-                            maxLines = 1
+                            fontSize = if (isNarrowPhone) 11.sp else if (isPhone) 12.sp else 14.sp,
+                            maxLines = 1,
+                            softWrap = false,
+                            overflow = TextOverflow.Ellipsis
                         )
                     }
                 }
@@ -242,7 +250,9 @@ private fun InputsTab(
 
     if (isPhone) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(14.dp)
         ) {
             dinSection(Modifier.fillMaxWidth())
@@ -425,10 +435,13 @@ private fun OutputsTab(
 ) {
     if (isPhone) {
         Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+            modifier = Modifier
+                .fillMaxSize()
+                .verticalScroll(rememberScrollState()),
             verticalArrangement = Arrangement.spacedBy(12.dp)
         ) {
             DoutRuleEditor(
+                isPhone = true,
                 modifier = Modifier.fillMaxWidth(),
                 title = "СИЛОВОЙ ВЫХОД DOUT 1 (P0.29)",
                 config = dout1,
@@ -437,6 +450,7 @@ private fun OutputsTab(
                 onChange = onDout1Change
             )
             DoutRuleEditor(
+                isPhone = true,
                 modifier = Modifier.fillMaxWidth(),
                 title = "СИЛОВОЙ ВЫХОД DOUT 2 (P0.31)",
                 config = dout2,
@@ -451,6 +465,7 @@ private fun OutputsTab(
             horizontalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             DoutRuleEditor(
+                isPhone = false,
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                 title = "СИЛОВОЙ ВЫХОД DOUT 1 (P0.29)",
                 config = dout1,
@@ -459,6 +474,7 @@ private fun OutputsTab(
                 onChange = onDout1Change
             )
             DoutRuleEditor(
+                isPhone = false,
                 modifier = Modifier.weight(1f).verticalScroll(rememberScrollState()),
                 title = "СИЛОВОЙ ВЫХОД DOUT 2 (P0.31)",
                 config = dout2,
@@ -472,6 +488,7 @@ private fun OutputsTab(
 
 @Composable
 private fun DoutRuleEditor(
+    isPhone: Boolean,
     modifier: Modifier,
     title: String,
     config: DoutConfig,
@@ -508,6 +525,7 @@ private fun DoutRuleEditor(
             )
 
             ConditionEditor(
+                isPhone = isPhone,
                 label = "Условие A (основное)",
                 cond = config.condA,
                 ain1Profile = ain1Profile,
@@ -518,6 +536,7 @@ private fun DoutRuleEditor(
 
             if (config.mode == OutputMode.LOGIC_OR || config.mode == OutputMode.LOGIC_AND) {
                 ConditionEditor(
+                    isPhone = isPhone,
                     label = if (config.mode == OutputMode.LOGIC_OR) "Условие B (ИЛИ)" else "Условие B (И)",
                     cond = config.condB,
                     ain1Profile = ain1Profile,
@@ -532,6 +551,7 @@ private fun DoutRuleEditor(
 
 @Composable
 private fun ConditionEditor(
+    isPhone: Boolean,
     label: String,
     cond: RuleCondition,
     ain1Profile: AnalogSensorProfile,
@@ -557,6 +577,20 @@ private fun ConditionEditor(
 
     var thresholdText by remember(cond.source, cond.threshold) { mutableStateOf(displayThreshold) }
 
+    val onThresholdTextChange: (String) -> Unit = { txt ->
+        thresholdText = txt
+        val parsed = txt.replace(',', '.').toFloatOrNull()
+        if (parsed != null) {
+            val rawThreshold = when (cond.source) {
+                SignalSource.AIN1_MV -> ain1Profile.valueToMv(parsed)
+                SignalSource.AIN2_MV -> ain2Profile.valueToMv(parsed)
+                SignalSource.TWATR_C10, SignalSource.TOIL_C10 -> (parsed * 10f).toInt()
+                else -> parsed.toInt()
+            }
+            onChange(cond.copy(threshold = rawThreshold))
+        }
+    }
+
     Column(
         modifier = Modifier
             .fillMaxWidth()
@@ -566,14 +600,15 @@ private fun ConditionEditor(
     ) {
         Text(label, color = Color(0xFFFFD54F), fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(modifier = Modifier.weight(1f)) {
+        if (isPhone) {
+            // На телефоне: выбор источника на всю ширину, операторы строкой ниже
+            Box(modifier = Modifier.fillMaxWidth()) {
                 OutlinedButton(
                     onClick = { expandedSource = true },
                     modifier = Modifier.fillMaxWidth(),
-                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    contentPadding = PaddingValues(horizontal = 10.dp, vertical = 8.dp)
                 ) {
-                    Text(cond.source.title, color = Color.White, maxLines = 1, fontSize = 12.sp)
+                    Text(cond.source.title, color = Color.White, maxLines = 1, fontSize = 13.sp)
                 }
                 DropdownMenu(expanded = expandedSource, onDismissRequest = { expandedSource = false }) {
                     SignalSource.entries.forEach { src ->
@@ -587,8 +622,7 @@ private fun ConditionEditor(
                     }
                 }
             }
-
-            Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                 CompareOp.entries.forEach { op ->
                     FilterChip(
                         selected = cond.op == op,
@@ -597,41 +631,90 @@ private fun ConditionEditor(
                     )
                 }
             }
-        }
 
-        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-            DarkTextField(
-                value = thresholdText,
-                label = "Порог ($unitLabel)",
-                isNumber = true,
-                modifier = Modifier.weight(1f),
-                onValueChange = { txt ->
-                    thresholdText = txt
-                    val parsed = txt.replace(',', '.').toFloatOrNull() ?: return@DarkTextField
-                    val rawThreshold = when (cond.source) {
-                        SignalSource.AIN1_MV -> ain1Profile.valueToMv(parsed)
-                        SignalSource.AIN2_MV -> ain2Profile.valueToMv(parsed)
-                        SignalSource.TWATR_C10, SignalSource.TOIL_C10 -> (parsed * 10f).toInt()
-                        else -> parsed.toInt()
-                    }
-                    onChange(cond.copy(threshold = rawThreshold))
-                }
-            )
-            DarkTextField(
-                value = cond.hysteresis.toString(),
-                label = "Гистерезис",
-                isNumber = true,
-                modifier = Modifier.weight(1f),
-                onValueChange = { it.toIntOrNull()?.let { h -> onChange(cond.copy(hysteresis = h)) } }
-            )
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                DarkTextField(
+                    value = thresholdText,
+                    label = "Порог ($unitLabel)",
+                    isNumber = true,
+                    modifier = Modifier.weight(1f),
+                    onValueChange = onThresholdTextChange
+                )
+                DarkTextField(
+                    value = cond.hysteresis.toString(),
+                    label = "Гистерезис",
+                    isNumber = true,
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { it.toIntOrNull()?.let { h -> onChange(cond.copy(hysteresis = h)) } }
+                )
+            }
             if (showDelay) {
                 DarkTextField(
                     value = cond.delayMs.toString(),
-                    label = "Задержка (мс)",
+                    label = "Задержка срабатывания (мс)",
                     isNumber = true,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.fillMaxWidth(),
                     onValueChange = { it.toIntOrNull()?.let { d -> onChange(cond.copy(delayMs = d)) } }
                 )
+            }
+        } else {
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Box(modifier = Modifier.weight(1f)) {
+                    OutlinedButton(
+                        onClick = { expandedSource = true },
+                        modifier = Modifier.fillMaxWidth(),
+                        contentPadding = PaddingValues(horizontal = 10.dp, vertical = 6.dp)
+                    ) {
+                        Text(cond.source.title, color = Color.White, maxLines = 1, fontSize = 12.sp)
+                    }
+                    DropdownMenu(expanded = expandedSource, onDismissRequest = { expandedSource = false }) {
+                        SignalSource.entries.forEach { src ->
+                            DropdownMenuItem(
+                                text = { Text(src.title) },
+                                onClick = {
+                                    expandedSource = false
+                                    onChange(cond.copy(source = src))
+                                }
+                            )
+                        }
+                    }
+                }
+
+                Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                    CompareOp.entries.forEach { op ->
+                        FilterChip(
+                            selected = cond.op == op,
+                            onClick = { onChange(cond.copy(op = op)) },
+                            label = { Text(op.symbol, fontWeight = FontWeight.Bold) }
+                        )
+                    }
+                }
+            }
+
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                DarkTextField(
+                    value = thresholdText,
+                    label = "Порог ($unitLabel)",
+                    isNumber = true,
+                    modifier = Modifier.weight(1f),
+                    onValueChange = onThresholdTextChange
+                )
+                DarkTextField(
+                    value = cond.hysteresis.toString(),
+                    label = "Гистерезис",
+                    isNumber = true,
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { it.toIntOrNull()?.let { h -> onChange(cond.copy(hysteresis = h)) } }
+                )
+                if (showDelay) {
+                    DarkTextField(
+                        value = cond.delayMs.toString(),
+                        label = "Задержка (мс)",
+                        isNumber = true,
+                        modifier = Modifier.weight(1f),
+                        onValueChange = { it.toIntOrNull()?.let { d -> onChange(cond.copy(delayMs = d)) } }
+                    )
+                }
             }
         }
     }
@@ -649,7 +732,9 @@ private fun CanTab(
     onSlotChange: (Int, CanSignalSlot) -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -799,7 +884,9 @@ private fun SystemTab(
     onSetGpsRate: (Int) -> Unit
 ) {
     Column(
-        modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()),
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         Text("ЧАСТОТА ОБНОВЛЕНИЯ GPS-МОДУЛЯ BE-880", color = Color(0xFF4FC3F7), fontWeight = FontWeight.Bold)
@@ -835,7 +922,7 @@ private fun DarkTextField(
     OutlinedTextField(
         value = value,
         onValueChange = onValueChange,
-        label = { Text(label, fontSize = 11.sp, maxLines = 1) },
+        label = { Text(label, fontSize = 11.sp, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         singleLine = true,
         modifier = modifier,
         keyboardOptions = if (isNumber) KeyboardOptions(keyboardType = KeyboardType.Number) else KeyboardOptions.Default,
