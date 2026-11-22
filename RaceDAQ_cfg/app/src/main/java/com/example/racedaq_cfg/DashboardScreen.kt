@@ -24,17 +24,27 @@ private data class GaugeItem(
     val isAlarm: Boolean
 )
 
+private fun checkAnalogAlarm(profile: AnalogSensorProfile, value: Float, rpm: Int): Boolean {
+    val nameLower = profile.name.lowercase()
+    return when {
+        "масл" in nameLower -> rpm > 1500 && value < 1.2f
+        "буст" in nameLower -> value > 1.8f
+        else -> false
+    }
+}
+
 @Composable
 fun DashboardScreen(
     state: TelemetryState,
     config: SystemConfig,
     ain1Profile: AnalogSensorProfile,
     ain2Profile: AnalogSensorProfile,
+    deviceInfo: DeviceInfoPacket = DeviceInfoPacket(),
     onToggleDout: (channel: Int, enable: Boolean) -> Unit,
     onOpenConfig: () -> Unit
 ) {
-    val oilPressure = ain1Profile.mvToValue(state.mvAin1)
-    val boostBar = ain2Profile.mvToValue(state.mvAin2)
+    val ain1Val = ain1Profile.mvToValue(state.mvAin1)
+    val ain2Val = ain2Profile.mvToValue(state.mvAin2)
 
     val gauges = listOf(
         GaugeItem(
@@ -57,15 +67,15 @@ fun DashboardScreen(
         ),
         GaugeItem(
             title = ain1Profile.name.uppercase(),
-            value = "${"%.2f".format(oilPressure)}",
+            value = "${"%.2f".format(ain1Val)}",
             unit = ain1Profile.unit,
-            isAlarm = state.rpm > 1500 && oilPressure < 1.2f
+            isAlarm = checkAnalogAlarm(ain1Profile, ain1Val, state.rpm)
         ),
         GaugeItem(
             title = ain2Profile.name.uppercase(),
-            value = "${"%.2f".format(boostBar)}",
+            value = "${"%.2f".format(ain2Val)}",
             unit = ain2Profile.unit,
-            isAlarm = false
+            isAlarm = checkAnalogAlarm(ain2Profile, ain2Val, state.rpm)
         ),
         GaugeItem(
             title = "GPS / G-FORCE",
@@ -74,6 +84,13 @@ fun DashboardScreen(
             isAlarm = false
         )
     )
+
+    val fwShort = deviceInfo.fwVersion.substringBefore(" (")
+    val versionBadge = if (state.connected) {
+        "HW ${deviceInfo.hwVersion} | FW $fwShort"
+    } else {
+        ""
+    }
 
     BoxWithConstraints(
         modifier = Modifier
@@ -113,7 +130,7 @@ fun DashboardScreen(
                 .padding(screenPad),
             verticalArrangement = Arrangement.spacedBy(gridGap)
         ) {
-            // 1. ВЕРХНЯЯ ПАНЕЛЬ: ШКАЛА ОБОРОТОВ + СТАТУСЫ
+            // 1. ВЕРХНЯЯ ПАНЕЛЬ: ШКАЛА ОБОРОТОВ + СТАТУСЫ И ВЕРСИИ HW/FW
             RpmShiftBar(
                 rpm = state.rpm,
                 maxRpm = 8000,
@@ -123,7 +140,6 @@ fun DashboardScreen(
             )
 
             if (isPortraitPhone) {
-                // На узком телефоне разбиваем статус на 2 аккуратные строки
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween,
@@ -131,10 +147,10 @@ fun DashboardScreen(
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text(
-                            text = if (state.connected) "● RACEDAQ ONLINE" else "○ ПОИСК RACEDAQ...",
+                            text = if (state.connected) "● ONLINE • $versionBadge" else "○ ПОИСК RACEDAQ...",
                             color = if (state.connected) Color(0xFF00E676) else Color(0xFFFF5252),
                             fontWeight = FontWeight.Bold,
-                            fontSize = 13.sp,
+                            fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
                         )
@@ -162,11 +178,12 @@ fun DashboardScreen(
                     verticalAlignment = Alignment.CenterVertically
                 ) {
                     Text(
-                        text = if (state.connected) "● RACEDAQ ONLINE" else "○ ПОИСК RACEDAQ...",
+                        text = if (state.connected) "● RACEDAQ ONLINE ($versionBadge)" else "○ ПОИСК RACEDAQ...",
                         color = if (state.connected) Color(0xFF00E676) else Color(0xFFFF5252),
                         fontWeight = FontWeight.Bold,
                         fontSize = if (isCompactHeight) 12.sp else 14.sp,
-                        maxLines = 1
+                        maxLines = 1,
+                        overflow = TextOverflow.Ellipsis
                     )
                     Text(
                         text = "GPS: ${state.gpsSats} спутн. | IGN: ${"%.1f".format(state.ignVolts)} В",

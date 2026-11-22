@@ -23,29 +23,40 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.core.content.ContextCompat
 
+object BleManagerHolder {
+    @Volatile
+    private var instance: RaceDaqBleManager? = null
+
+    fun get(context: Context): RaceDaqBleManager {
+        return instance ?: synchronized(this) {
+            instance ?: RaceDaqBleManager(context.applicationContext).also { instance = it }
+        }
+    }
+}
+
 object SensorProfileStorage {
     private const val PREFS_NAME = "racedaq_sensor_profiles"
 
     fun loadProfile(context: Context, prefix: String, defaultProfile: AnalogSensorProfile): AnalogSensorProfile {
         val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
         return AnalogSensorProfile(
-            name = prefs.getString("\${prefix}_name", defaultProfile.name) ?: defaultProfile.name,
-            unit = prefs.getString("\${prefix}_unit", defaultProfile.unit) ?: defaultProfile.unit,
-            v1Mv = prefs.getInt("\${prefix}_v1", defaultProfile.v1Mv),
-            val1 = prefs.getFloat("\${prefix}_val1", defaultProfile.val1),
-            v2Mv = prefs.getInt("\${prefix}_v2", defaultProfile.v2Mv),
-            val2 = prefs.getFloat("\${prefix}_val2", defaultProfile.val2)
+            name = prefs.getString("${prefix}_name", defaultProfile.name) ?: defaultProfile.name,
+            unit = prefs.getString("${prefix}_unit", defaultProfile.unit) ?: defaultProfile.unit,
+            v1Mv = prefs.getInt("${prefix}_v1", defaultProfile.v1Mv),
+            val1 = prefs.getFloat("${prefix}_val1", defaultProfile.val1),
+            v2Mv = prefs.getInt("${prefix}_v2", defaultProfile.v2Mv),
+            val2 = prefs.getFloat("${prefix}_val2", defaultProfile.val2)
         )
     }
 
     fun saveProfile(context: Context, prefix: String, profile: AnalogSensorProfile) {
         context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
-            .putString("\${prefix}_name", profile.name)
-            .putString("\${prefix}_unit", profile.unit)
-            .putInt("\${prefix}_v1", profile.v1Mv)
-            .putFloat("\${prefix}_val1", profile.val1)
-            .putInt("\${prefix}_v2", profile.v2Mv)
-            .putFloat("\${prefix}_val2", profile.val2)
+            .putString("${prefix}_name", profile.name)
+            .putString("${prefix}_unit", profile.unit)
+            .putInt("${prefix}_v1", profile.v1Mv)
+            .putFloat("${prefix}_val1", profile.val1)
+            .putInt("${prefix}_v2", profile.v2Mv)
+            .putFloat("${prefix}_val2", profile.val2)
             .apply()
     }
 }
@@ -59,7 +70,7 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
 
         window.addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON)
-        bleManager = RaceDaqBleManager(applicationContext)
+        bleManager = BleManagerHolder.get(this)
 
         setContent {
             MaterialTheme(colorScheme = darkColorScheme()) {
@@ -76,6 +87,27 @@ class MainActivity : ComponentActivity() {
                     )
                 }
             }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (!bleManager.telemetry.value.connected && hasBlePermissions()) {
+            bleManager.startAutoConnect()
+        }
+    }
+
+    private fun hasBlePermissions(): Boolean {
+        val perms = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            arrayOf(
+                Manifest.permission.BLUETOOTH_SCAN,
+                Manifest.permission.BLUETOOTH_CONNECT
+            )
+        } else {
+            arrayOf(Manifest.permission.ACCESS_FINE_LOCATION)
+        }
+        return perms.all {
+            ContextCompat.checkSelfPermission(this, it) == PackageManager.PERMISSION_GRANTED
         }
     }
 }
@@ -111,7 +143,9 @@ private fun RaceDaqApp(
             ContextCompat.checkSelfPermission(context, it) == PackageManager.PERMISSION_GRANTED
         }
         if (allGranted) {
-            bleManager.startAutoConnect()
+            if (!bleManager.telemetry.value.connected) {
+                bleManager.startAutoConnect()
+            }
         } else {
             permissionLauncher.launch(requiredPermissions)
         }
@@ -134,7 +168,7 @@ private fun RaceDaqApp(
             SensorProfileStorage.loadProfile(
                 context = context,
                 prefix = "ain2",
-                defaultProfile = AnalogSensorProfile("Наддув (MAP)", "бар", 500, -1.0f, 4500, 2.0f)
+                defaultProfile = AnalogSensorProfile("Буст", "бар", 500, -1.0f, 4500, 2.0f)
             )
         )
     }
@@ -142,6 +176,7 @@ private fun RaceDaqApp(
     val telemetry by bleManager.telemetry.collectAsState()
     val sysConfig by bleManager.config.collectAsState()
     val gpsHz by bleManager.gpsRateHz.collectAsState()
+    val deviceInfo by bleManager.deviceInfo.collectAsState()
 
     if (showConfig) {
         ConfigScreen(
@@ -150,6 +185,7 @@ private fun RaceDaqApp(
             currentGpsHz = gpsHz,
             ain1Profile = ain1Profile,
             ain2Profile = ain2Profile,
+            deviceInfo = deviceInfo,
             onSaveSystemConfig = { newCfg ->
                 bleManager.writeSystemConfig(newCfg)
             },
@@ -170,6 +206,7 @@ private fun RaceDaqApp(
             config = sysConfig,
             ain1Profile = ain1Profile,
             ain2Profile = ain2Profile,
+            deviceInfo = deviceInfo,
             onToggleDout = { channel, enable ->
                 bleManager.toggleDout(channel, enable)
             },

@@ -3,12 +3,13 @@ package com.example.racedaq_cfg
 import android.annotation.SuppressLint
 import android.bluetooth.*
 import android.bluetooth.le.ScanCallback
-import android.bluetooth.le.ScanFilter
 import android.bluetooth.le.ScanResult
 import android.bluetooth.le.ScanSettings
 import android.content.Context
+import android.os.Build
+import android.os.Handler
+import android.os.Looper
 import android.os.ParcelUuid
-
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -18,18 +19,24 @@ import java.util.UUID
 class RaceDaqBleManager(private val context: Context) {
 
     companion object {
-        val SERVICE_UUID: UUID    = UUID.fromString("00001ff8-0000-1000-8000-00805f9b34fb")
-        val CHAR_CAN_MAIN: UUID   = UUID.fromString("00000001-0000-1000-8000-00805f9b34fb")
-        val CHAR_GPS_MAIN: UUID   = UUID.fromString("00000003-0000-1000-8000-00805f9b34fb")
-        val CHAR_IO_CTRL: UUID    = UUID.fromString("00000006-0000-1000-8000-00805f9b34fb")
-        val CHAR_GPS_RATE: UUID   = UUID.fromString("00000007-0000-1000-8000-00805f9b34fb")
-        val CHAR_SYS_CONFIG: UUID = UUID.fromString("00000008-0000-1000-8000-00805f9b34fb")
-        val CCCD_UUID: UUID       = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+        val SERVICE_UUID: UUID     = UUID.fromString("00001ff8-0000-1000-8000-00805f9b34fb")
+        val CHAR_CAN_MAIN: UUID    = UUID.fromString("00000001-0000-1000-8000-00805f9b34fb")
+        val CHAR_GPS_MAIN: UUID    = UUID.fromString("00000003-0000-1000-8000-00805f9b34fb")
+        val CHAR_IO_CTRL: UUID     = UUID.fromString("00000006-0000-1000-8000-00805f9b34fb")
+        val CHAR_GPS_RATE: UUID    = UUID.fromString("00000007-0000-1000-8000-00805f9b34fb")
+        val CHAR_SYS_CONFIG: UUID  = UUID.fromString("00000008-0000-1000-8000-00805f9b34fb")
+        val CHAR_DEVICE_INFO: UUID = UUID.fromString("00000009-0000-1000-8000-00805f9b34fb")
+        val CCCD_UUID: UUID        = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
     }
 
     private val btAdapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
+    private val mainHandler = Handler(Looper.getMainLooper())
+
     private var gatt: BluetoothGatt? = null
+    private var lastDevice: BluetoothDevice? = null
+    private var isScanning = false
+    private var isConnecting = false
     private val notifyQueue = ArrayDeque<BluetoothGattCharacteristic>()
 
     private val _telemetry = MutableStateFlow(TelemetryState())
@@ -41,35 +48,130 @@ class RaceDaqBleManager(private val context: Context) {
     private val _gpsRateHz = MutableStateFlow(10)
     val gpsRateHz = _gpsRateHz.asStateFlow()
 
+    private val _deviceInfo = MutableStateFlow(DeviceInfoPacket())
+    val deviceInfo = _deviceInfo.asStateFlow()
+
+    private val reconnectRunnable = Runnable { startAutoConnect() }
+    private val directConnectTimeoutRunnable = Runnable {
+        if (isConnecting && !_telemetry.value.connected) {
+            isConnecting = false
+            closeGattSafe()
+            startBleScan()
+        }
+    }
+
     fun startAutoConnect() {
+        val adapter = btAdapter ?: return
+        if (!adapter.isEnabled) return
+
+        // Не трогаем активное или устанавливаемое соединение
+        if (_telemetry.value.connected || isConnecting || isScanning) return
+
+        mainHandler.removeCallbacks(reconnectRunnable)
+
+        // Если устройство уже находили ранее — подключаемся напрямую без сканирования (работает и в фоне)
+        val knownDevice = lastDevice
+        if (knownDevice != null) {
+            connectToDevice(knownDevice, withScanFallback = true)
+        } else {
+            startBleScan()
+        }
+    }
+
+    private fun startBleScan() {
         val scanner = btAdapter?.bluetoothLeScanner ?: return
-        val filter = ScanFilter.Builder().setServiceUuid(ParcelUuid(SERVICE_UUID)).build()
-        val settings = ScanSettings.Builder().setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY).build()
-        scanner.startScan(listOf(filter), settings, scanCallback)
+        if (isScanning || isConnecting || _telemetry.value.connected) return
+
+        closeGattSafe()
+
+        val settings = ScanSettings.Builder()
+            .setScanMode(ScanSettings.SCAN_MODE_LOW_LATENCY)
+            .build()
+
+        isScanning = true
+        runCatching {
+            scanner.startScan(null, settings, scanCallback)
+        }.onFailure {
+            isScanning = false
+        }
+    }
+
+    private fun stopScanSafe() {
+        if (!isScanning) return
+        isScanning = false
+        runCatching { btAdapter?.bluetoothLeScanner?.stopScan(scanCallback) }
+    }
+
+    private fun connectToDevice(device: BluetoothDevice, withScanFallback: Boolean = false) {
+        if (isConnecting || _telemetry.value.connected) return
+        stopScanSafe()
+        closeGattSafe()
+
+        isConnecting = true
+        lastDevice = device
+
+        if (withScanFallback) {
+            mainHandler.removeCallbacks(directConnectTimeoutRunnable)
+            mainHandler.postDelayed(directConnectTimeoutRunnable, 4000L)
+        }
+
+        gatt = device.connectGatt(
+            context,
+            false,
+            gattCallback,
+            BluetoothDevice.TRANSPORT_LE
+        )
+    }
+
+    private fun closeGattSafe() {
+        gatt?.let {
+            runCatching { it.disconnect() }
+            runCatching { it.close() }
+        }
+        gatt = null
     }
 
     private val scanCallback = object : ScanCallback() {
         override fun onScanResult(callbackType: Int, result: ScanResult) {
-            btAdapter?.bluetoothLeScanner?.stopScan(this)
-            gatt = result.device.connectGatt(context, true, gattCallback, BluetoothDevice.TRANSPORT_LE)
+            if (!isScanning || isConnecting || _telemetry.value.connected) return
+            val name = result.device.name ?: result.scanRecord?.deviceName ?: ""
+            val hasUuid = result.scanRecord?.serviceUuids?.contains(ParcelUuid(SERVICE_UUID)) == true
+
+            if (name.contains("RACEDAQ", ignoreCase = true) || hasUuid) {
+                connectToDevice(result.device, withScanFallback = false)
+            }
+        }
+
+        override fun onScanFailed(errorCode: Int) {
+            isScanning = false
+            mainHandler.removeCallbacks(reconnectRunnable)
+            mainHandler.postDelayed(reconnectRunnable, 2000L)
         }
     }
 
     private val gattCallback = object : BluetoothGattCallback() {
         override fun onConnectionStateChange(g: BluetoothGatt, status: Int, newState: Int) {
-            if (newState == BluetoothProfile.STATE_CONNECTED) {
+            if (newState == BluetoothProfile.STATE_CONNECTED && status == BluetoothGatt.GATT_SUCCESS) {
+                mainHandler.removeCallbacks(directConnectTimeoutRunnable)
+                mainHandler.removeCallbacks(reconnectRunnable)
+                isConnecting = false
+                lastDevice = g.device
                 _telemetry.update { it.copy(connected = true) }
-                g.requestMtu(247)
-            } else if (newState == BluetoothProfile.STATE_DISCONNECTED) {
+                g.discoverServices()
+            } else if (newState == BluetoothProfile.STATE_DISCONNECTED || status != BluetoothGatt.GATT_SUCCESS) {
+                mainHandler.removeCallbacks(directConnectTimeoutRunnable)
+                isConnecting = false
                 _telemetry.update { it.copy(connected = false) }
+                runCatching { g.close() }
+                if (gatt == g) gatt = null
+
+                mainHandler.removeCallbacks(reconnectRunnable)
+                mainHandler.postDelayed(reconnectRunnable, 800L)
             }
         }
 
-        override fun onMtuChanged(g: BluetoothGatt, mtu: Int, status: Int) {
-            g.discoverServices()
-        }
-
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
+            if (status != BluetoothGatt.GATT_SUCCESS) return
             val svc = g.getService(SERVICE_UUID) ?: return
             notifyQueue.clear()
             svc.getCharacteristic(CHAR_CAN_MAIN)?.let { notifyQueue.add(it) }
@@ -81,31 +183,80 @@ class RaceDaqBleManager(private val context: Context) {
             if (notifyQueue.isNotEmpty()) {
                 enableNextNotification(g)
             } else {
-                // После подписки на потоки читаем текущие настройки из nRF52832
-                g.getService(SERVICE_UUID)?.getCharacteristic(CHAR_SYS_CONFIG)?.let { g.readCharacteristic(it) }
+                g.getService(SERVICE_UUID)?.getCharacteristic(CHAR_SYS_CONFIG)?.let {
+                    g.readCharacteristic(it)
+                }
             }
         }
 
+        // Android 13+ (API 33+)
+        override fun onCharacteristicRead(
+            g: BluetoothGatt,
+            c: BluetoothGattCharacteristic,
+            value: ByteArray,
+            status: Int
+        ) {
+            if (status == BluetoothGatt.GATT_SUCCESS) {
+                handleCharacteristicRead(g, c.uuid, value)
+            }
+        }
+
+        // Android 12 и ниже
         @Deprecated("Deprecated in Java")
-        override fun onCharacteristicRead(g: BluetoothGatt, c: BluetoothGattCharacteristic, status: Int) {
-            if (status != BluetoothGatt.GATT_SUCCESS) return
-            when (c.uuid) {
-                CHAR_SYS_CONFIG -> {
-                    SystemConfig.fromBytes(c.value)?.let { _config.value = it }
-                    g.getService(SERVICE_UUID)?.getCharacteristic(CHAR_GPS_RATE)?.let { g.readCharacteristic(it) }
-                }
-                CHAR_GPS_RATE -> {
-                    if (c.value.isNotEmpty()) _gpsRateHz.value = c.value[0].toInt() and 0xFF
-                }
+        override fun onCharacteristicRead(
+            g: BluetoothGatt,
+            c: BluetoothGattCharacteristic,
+            status: Int
+        ) {
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU && status == BluetoothGatt.GATT_SUCCESS) {
+                @Suppress("DEPRECATION")
+                handleCharacteristicRead(g, c.uuid, c.value ?: return)
             }
         }
 
+        // Android 13+ (API 33+)
+        override fun onCharacteristicChanged(
+            g: BluetoothGatt,
+            c: BluetoothGattCharacteristic,
+            value: ByteArray
+        ) {
+            handleCharacteristicChanged(c.uuid, value)
+        }
+
+        // Android 12 и ниже
         @Deprecated("Deprecated in Java")
         override fun onCharacteristicChanged(g: BluetoothGatt, c: BluetoothGattCharacteristic) {
-            when (c.uuid) {
-                CHAR_CAN_MAIN -> _telemetry.update { TelemetryParser.parseCanPacket(c.value, it) }
-                CHAR_GPS_MAIN -> _telemetry.update { TelemetryParser.parseGpsPacket(c.value, it) }
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+                @Suppress("DEPRECATION")
+                handleCharacteristicChanged(c.uuid, c.value ?: return)
             }
+        }
+    }
+
+    private fun handleCharacteristicRead(g: BluetoothGatt, uuid: UUID, value: ByteArray) {
+        when (uuid) {
+            CHAR_SYS_CONFIG -> {
+                SystemConfig.fromBytes(value)?.let { _config.value = it }
+                g.getService(SERVICE_UUID)?.getCharacteristic(CHAR_GPS_RATE)?.let {
+                    g.readCharacteristic(it)
+                }
+            }
+            CHAR_GPS_RATE -> {
+                if (value.isNotEmpty()) _gpsRateHz.value = value[0].toInt() and 0xFF
+                g.getService(SERVICE_UUID)?.getCharacteristic(CHAR_DEVICE_INFO)?.let {
+                    g.readCharacteristic(it)
+                }
+            }
+            CHAR_DEVICE_INFO -> {
+                DeviceInfoPacket.fromBytes(value)?.let { _deviceInfo.value = it }
+            }
+        }
+    }
+
+    private fun handleCharacteristicChanged(uuid: UUID, value: ByteArray) {
+        when (uuid) {
+            CHAR_CAN_MAIN -> _telemetry.update { TelemetryParser.parseCanPacket(value, it) }
+            CHAR_GPS_MAIN -> _telemetry.update { TelemetryParser.parseGpsPacket(value, it) }
         }
     }
 
@@ -113,27 +264,43 @@ class RaceDaqBleManager(private val context: Context) {
         val chr = notifyQueue.removeFirstOrNull() ?: return
         g.setCharacteristicNotification(chr, true)
         val desc = chr.getDescriptor(CCCD_UUID) ?: return
-        desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
-        g.writeDescriptor(desc)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            g.writeDescriptor(desc, BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
+        } else {
+            @Suppress("DEPRECATION")
+            desc.value = BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE
+            @Suppress("DEPRECATION")
+            g.writeDescriptor(desc)
+        }
+    }
+
+    private fun writeCharBytes(chr: BluetoothGattCharacteristic, bytes: ByteArray) {
+        val g = gatt ?: return
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+            g.writeCharacteristic(chr, bytes, BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT)
+        } else {
+            @Suppress("DEPRECATION")
+            chr.value = bytes
+            chr.writeType = BluetoothGattCharacteristic.WRITE_TYPE_DEFAULT
+            @Suppress("DEPRECATION")
+            g.writeCharacteristic(chr)
+        }
     }
 
     fun toggleDout(channel: Int, enable: Boolean) {
         val chr = gatt?.getService(SERVICE_UUID)?.getCharacteristic(CHAR_IO_CTRL) ?: return
-        chr.value = byteArrayOf(channel.toByte(), if (enable) 1 else 0)
-        gatt?.writeCharacteristic(chr)
+        writeCharBytes(chr, byteArrayOf(channel.toByte(), if (enable) 1 else 0))
     }
 
     fun setGpsRate(hz: Int) {
         val chr = gatt?.getService(SERVICE_UUID)?.getCharacteristic(CHAR_GPS_RATE) ?: return
-        chr.value = byteArrayOf(hz.coerceIn(1, 25).toByte())
-        gatt?.writeCharacteristic(chr)
+        writeCharBytes(chr, byteArrayOf(hz.coerceIn(1, 25).toByte()))
         _gpsRateHz.value = hz
     }
 
     fun writeSystemConfig(newConfig: SystemConfig) {
         val chr = gatt?.getService(SERVICE_UUID)?.getCharacteristic(CHAR_SYS_CONFIG) ?: return
-        chr.value = newConfig.toBytes()
-        gatt?.writeCharacteristic(chr)
+        writeCharBytes(chr, newConfig.toBytes())
         _config.value = newConfig
     }
 }
