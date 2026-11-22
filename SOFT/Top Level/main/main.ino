@@ -4,7 +4,11 @@
 #include <SPI.h>
 #include <CAN.h>
 #include <bluefruit.h>
+#include <Adafruit_LittleFS.h>
+#include <InternalFileSystem.h>
 #include "PacketIdInfo.h"
+
+using namespace Adafruit_LittleFS_Namespace;
 
 // ============================================================================
 // АКТИВНЫЕ МОДУЛИ ПЛАТЫ RACEDAQ
@@ -18,26 +22,20 @@
 // ============================================================================
 // РАСПИНОВКА ПЛАТЫ СОГЛАСНО СХЕМЕ (МОДУЛЬ E73-2G4M04S1B / nRF52832)
 // ============================================================================
-
-// 1. Аналоговые входы
 #define PIN_NRF_T_WATR      2   // P0.02 (AIN0) - Датчик температуры воды (подтяжка R35 = 1K 0.1% к 3.3V)
 #define PIN_NRF_T_OIL       3   // P0.03 (AIN1) - Датчик температуры масла (подтяжка R37 = 1K 0.1% к 3.3V)
 #define PIN_NRF_AIN1        4   // P0.04 (AIN2) - Аналоговый вход 1 (делитель R41=5.1K / R42=10K)
 #define PIN_NRF_AIN2        5   // P0.05 (AIN3) - Аналоговый вход 2 (делитель R44=5.1K / R43=10K)
 #define PIN_NRF_SENS        28  // P0.28 (AIN4) - Контроль зажигания IGN (делитель R13=100K / R16=33K, R33=200K)
 
-// 2. Цифровые входы
-#define PIN_NRF_DIN1        11  // P0.11 - Цифровой вход 1 (внешняя подтяжка R25_PU = 10K к 3.3V)
-#define PIN_NRF_DIN2        9   // P0.09 - Цифровой вход 2 (внешняя подтяжка R26_PU = 10K к 3.3V)
+#define PIN_NRF_DIN1        11  // P0.11 - Цифровой вход 1
+#define PIN_NRF_DIN2        9   // P0.09 - Цифровой вход 2
 
-// 3. Цифровые силовые выходы (N-MOSFET ключи VT2 и VT3 WM10N33M)
-#define PIN_NRF_DOUT1       29  // P0.29 (вывод 9 модуля E73) - Силовой выход DOUT1
-#define PIN_NRF_DOUT2       31  // P0.31 (вывод 11 модуля E73) - Силовой выход DOUT2
+#define PIN_NRF_DOUT1       29  // P0.29 - Силовой выход DOUT1
+#define PIN_NRF_DOUT2       31  // P0.31 - Силовой выход DOUT2
 
-// 4. Управление питанием
-#define PIN_NRF_HOLD        30  // P0.30 (вывод 10 модуля E73) - Удержание DC-DC SQ20953AIC (D4)
+#define PIN_NRF_HOLD        30  // P0.30 - Удержание DC-DC SQ20953AIC (D4)
 
-// 5. Шина SPI (общая для MAX6675 и MCP2515)
 #define RACEDAQ_SPI_SCK     12  // P0.12
 #define RACEDAQ_SPI_MOSI    13  // P0.13
 #define RACEDAQ_SPI_MISO    14  // P0.14
@@ -45,7 +43,6 @@
 #define PIN_CAN_CS          22  // P0.22 - Chip Select контроллера MCP2515 (D2)
 #define PIN_CAN_INT         10  // P0.10 - Прерывание MCP2515 (D2)
 
-// 6. Шина I2C (модуль GY-LSM6DS3 D1)
 #define PIN_I2C_SDA         25  // P0.25
 #define PIN_I2C_SCL         26  // P0.26
 #define PIN_IMU_INT         27  // P0.27 - Прерывание INT1 от LSM6DS3
@@ -57,18 +54,120 @@ static const float NTC_PULLUP_OHM = 1000.0f; // R35 и R37 = 1K 0.1%
 static const float NTC_R25_OHM    = 2500.0f; // Номинал датчика при +25 °C
 static const float NTC_BETA_K     = 3900.0f; // Коэффициент Beta термистора
 
-// Задержка перед отключением питания после пропадания IGN (защита от просадки при стартере)
 static const uint32_t IGN_OFF_DELAY_MS = 3000;
 static const uint16_t IGN_OFF_PIN_MV   = 1000; // ~4.5 В на входе IGN
 
 // ============================================================================
-// ВИРТУАЛЬНЫЕ CAN PID ДЛЯ RACECHRONO
+// ВИРТУАЛЬНЫЕ CAN PID ДЛЯ RACECHRONO И ПЛАНШЕТА
 // ============================================================================
-static const uint32_t PID_ANALOG_VOLTAGES = 0x100; // 256: Напряжения T_WATR, T_OIL, AIN1, AIN2 (в мВ)
-static const uint32_t PID_EGT_IGN_DIO     = 0x101; // 257: EGT (0.25°C), IGN (мВ), битовые маски DIN/DOUT
-static const uint32_t PID_DIGITAL_BYTES   = 0x102; // 258: Побайтно (0/1): DIN1, DIN2, DOUT1, DOUT2, IGN
-static const uint32_t PID_IMU_ACCEL_GYRO  = 0x103; // 259: IMU LSM6DS3: AccX, AccY, AccZ (мg), YawRate (0.1 °/с)
-static const uint32_t PID_NTC_TEMPS_GYRO  = 0x104; // 260: Готовые T_WATR (0.1°C), T_OIL (0.1°C), GyroX, GyroY
+static const uint32_t PID_ANALOG_VOLTAGES = 0x100; // 256: T_WATR, T_OIL, AIN1, AIN2 (в мВ)
+static const uint32_t PID_EGT_IGN_DIO     = 0x101; // 257: EGT (0.25°C), IGN (мВ), маски DIN/DOUT
+static const uint32_t PID_DIGITAL_BYTES   = 0x102; // 258: DIN1, DIN2, DOUT1, DOUT2, IGN + RPM (uint16)
+static const uint32_t PID_IMU_ACCEL_GYRO  = 0x103; // 259: IMU: AccX, AccY, AccZ (мg), YawRate (0.1 °/с)
+static const uint32_t PID_NTC_TEMPS_GYRO  = 0x104; // 260: T_WATR (0.1°C), T_OIL (0.1°C), GyroX, GyroY
+
+// ============================================================================
+// СТРУКТУРА КОНФИГУРАЦИИ ВХОДОВ, CAN-СЛОТОВ И СЦЕНАРИЕВ ВЫХОДОВ (102 БАЙТА)
+// ============================================================================
+static const uint8_t CONFIG_MAGIC   = 0xDA;
+static const uint8_t CONFIG_VERSION = 2;
+
+enum DinMode : uint8_t {
+    DIN_MODE_DIGITAL = 0, // Обычный дискретный вход (0 или 1)
+    DIN_MODE_RPM     = 1  // Тахометр (измерение оборотов по спаду импульса)
+};
+
+enum OutputMode : uint8_t {
+    OUT_MODE_MANUAL    = 0, // Только ручное управление по BLE (0x0006)
+    OUT_MODE_SINGLE    = 1, // Одно условие (condA)
+    OUT_MODE_LOGIC_OR  = 2, // Условие A ИЛИ Условие B
+    OUT_MODE_LOGIC_AND = 3  // Условие A И Условие B
+};
+
+enum SignalSource : uint8_t {
+    SRC_NONE      = 0,
+    SRC_AIN1_MV   = 1,  // Аналоговый вход 1 (мВ: 0..5000)
+    SRC_AIN2_MV   = 2,  // Аналоговый вход 2 (мВ: 0..5000)
+    SRC_TWATR_C10 = 3,  // Температура воды (в 0.1 °C, 950 = 95.0 °C)
+    SRC_TOIL_C10  = 4,  // Температура масла (в 0.1 °C)
+    SRC_EGT_C     = 5,  // Температура выхлопа (°C)
+    SRC_IGN_MV    = 6,  // Напряжение зажигания (мВ)
+    SRC_DIN1      = 7,  // Цифровой вход 1 (0 или 1)
+    SRC_DIN2      = 8,  // Цифровой вход 2 (0 или 1)
+    SRC_RPM       = 9,  // Обороты двигателя (об/мин с настроенного входа DIN)
+    SRC_GPS_SPEED = 10, // Скорость по GPS (км/ч)
+    SRC_CAN_SLOT0 = 11, // Автономный CAN-слот 0 (например, RPM ЭБУ)
+    SRC_CAN_SLOT1 = 12, // Автономный CAN-слот 1 (например, Буст / MAP)
+    SRC_CAN_SLOT2 = 13, // Автономный CAN-слот 2 (например, Темп. АКПП)
+    SRC_CAN_SLOT3 = 14  // Автономный CAN-слот 3 (резервный канал CAN)
+};
+
+enum CompareOp : uint8_t {
+    OP_GT = 0, // Больше (>)
+    OP_LT = 1, // Меньше (<)
+    OP_EQ = 2  // Равно (==)
+};
+
+// Флаги для CanSignalSlot::flags
+static const uint8_t CAN_FLAG_BIG_ENDIAN = 0x01;
+static const uint8_t CAN_FLAG_SIGNED     = 0x02;
+
+#pragma pack(push, 1)
+struct DinConfig {
+    uint8_t mode;          // DinMode (0 = Digital, 1 = RPM)
+    uint8_t pulsesPer2Rev; // Кол-во импульсов за 2 оборота коленвала (4 = 4 цил. 4Т, 2 = 1 имп/об)
+    uint8_t pullup;        // 1 = внутренняя подтяжка INPUT_PULLUP, 0 = INPUT
+}; // 3 байта
+
+struct RuleCondition {
+    uint8_t  source;      // SignalSource
+    uint8_t  op;          // CompareOp
+    int32_t  threshold;   // Порог срабатывания
+    uint16_t hysteresis;  // Гистерезис возврата
+    uint16_t delayMs;     // Задержка перед включением (мс)
+}; // 10 байт
+
+struct DoutConfig {
+    uint8_t       mode;   // OutputMode
+    uint8_t       invert; // 0 = прямой выход, 1 = инверсный
+    RuleCondition condA;  // Основное условие
+    RuleCondition condB;  // Второе условие для И / ИЛИ
+}; // 22 байта
+
+struct CanSignalSlot {
+    uint8_t  enabled;     // 0 = выключен, 1 = активен
+    uint32_t canId;       // CAN ID пакета (11-bit или 29-bit)
+    uint8_t  startByte;   // Начальный байт в кадре (0..7)
+    uint8_t  length;      // Длина значения (1 или 2 байта)
+    uint8_t  flags;       // Бит 0: BigEndian (1) / LittleEndian (0); Бит 1: Signed (1) / Unsigned (0)
+    int16_t  mul;         // Множитель в 0.01 (100 = x1.0, 10 = x0.1, 25 = x0.25)
+    int16_t  offset;      // Смещение после умножения (например, -40)
+}; // 12 байт
+
+struct SystemConfig {
+    uint8_t       magic;        // CONFIG_MAGIC (0xDA)
+    uint8_t       version;      // CONFIG_VERSION (2)
+    DinConfig     din[2];       // [0] = DIN1, [1] = DIN2 (6 байт)
+    DoutConfig    dout[2];      // [0] = DOUT1, [1] = DOUT2 (44 байта)
+    uint16_t      canSpeedKbps; // Скорость CAN-шины: 250, 500 или 1000 кбит/с (2 байта)
+    CanSignalSlot canSlots[4];  // 4 слота для автономных правил по CAN (48 байт)
+}; // Итого: 102 байта (помещается в 1 BLE-пакет при MTU = 247)
+#pragma pack(pop)
+
+SystemConfig sysConfig;
+
+// Состояния конечных автоматов правил выходов
+struct RuleRuntimeState {
+    bool     latchedA;
+    bool     latchedB;
+    bool     outputActive;
+    uint32_t activeSinceMs;
+};
+RuleRuntimeState doutRuntime[2] = { {false, false, false, 0}, {false, false, false, 0} };
+
+// Актуальные значения автономных CAN-слотов и метки времени их последнего приёма
+int32_t  canSlotValues[4]   = { 0, 0, 0, 0 };
+uint32_t canSlotLastRxMs[4] = { 0, 0, 0, 0 };
 
 #ifdef HAS_GPS
 void dummy_debug(...) {}
@@ -86,16 +185,29 @@ uint8_t tempData[20];
 uint8_t dout1State = 0;
 uint8_t dout2State = 0;
 uint16_t latestEgtRaw = 0;
+uint16_t latestGpsSpeedKmh = 0;
+
+// Сглаженные значения АЦП в милливольтах
+uint16_t filtMvWat    = 0;
+uint16_t filtMvOil    = 0;
+uint16_t filtMvAin1   = 0;
+uint16_t filtMvAin2   = 0;
+uint16_t filtMvIgnPin = 0;
+
+// Переменные прерываний тахометра (DIN1 / DIN2)
+volatile uint32_t dinLastEdgeUs[2] = { 0, 0 };
+volatile uint32_t dinPeriodUs[2]   = { 0, 0 };
 
 // Хранилище данных IMU LSM6DS3
 bool isImuInitialized = false;
 int16_t imuAccX_mg = 0, imuAccY_mg = 0, imuAccZ_mg = 0;
 int16_t imuGyrX_dps10 = 0, imuGyrY_dps10 = 0, imuGyrZ_dps10 = 0;
 
-// Характеристики CAN-Bus (0x01 и 0x02)
+// Характеристики BLE
 BLECharacteristic canBusMainCharacteristic      = BLECharacteristic(0x01);
 BLECharacteristic canBusFilterCharacteristic    = BLECharacteristic(0x02);
 BLECharacteristic ioOutputControlCharacteristic = BLECharacteristic(0x06);
+BLECharacteristic systemConfigCharacteristic    = BLECharacteristic(0x08);
 
 static const int CAN_BUS_CMD_DENY_ALL  = 0;
 static const int CAN_BUS_CMD_ALLOW_ALL = 1;
@@ -108,6 +220,10 @@ boolean isCanBusConnected = false;
 #ifdef HAS_GPS
 BLECharacteristic gpsMainCharacteristic = BLECharacteristic(0x03);
 BLECharacteristic gpsTimeCharacteristic = BLECharacteristic(0x04);
+BLECharacteristic gpsRateCharacteristic = BLECharacteristic(0x07);
+uint8_t currentGpsHz = 10;
+
+void sendUbxCommand(uint8_t cls, uint8_t id, const uint8_t* payload, uint16_t len);
 
 int gpsPreviousDateAndHour = 0;
 uint8_t gpsSyncBits = 0;
@@ -189,19 +305,177 @@ void setDout2(bool active) {
     digitalWrite(PIN_NRF_DOUT2, active ? HIGH : LOW);
 }
 
-// Чтение АЦП в милливольтах (опорное AR_INTERNAL -> 3600 мВ при 12 битах)
-uint16_t readPinMillivolts(uint32_t ulPin) {
+// ============================================================================
+// ОБРАБОТЧИКИ ПРЕРЫВАНИЙ ТАХОМЕТРА И КОНФИГУРАЦИЯ ВХОДОВ DIN1 / DIN2
+// ============================================================================
+void din1Isr() {
+    uint32_t now = micros();
+    uint32_t dt = now - dinLastEdgeUs[0];
+    if (dt < 500) return; // Фильтр ВВ-помех (отсекаем импульсы короче 0.5 мс)
+    dinPeriodUs[0] = dt;
+    dinLastEdgeUs[0] = now;
+}
+
+void din2Isr() {
+    uint32_t now = micros();
+    uint32_t dt = now - dinLastEdgeUs[1];
+    if (dt < 500) return;
+    dinPeriodUs[1] = dt;
+    dinLastEdgeUs[1] = now;
+}
+
+void applyDinHardwareConfig() {
+    detachInterrupt(digitalPinToInterrupt(PIN_NRF_DIN1));
+    detachInterrupt(digitalPinToInterrupt(PIN_NRF_DIN2));
+
+    pinMode(PIN_NRF_DIN1, sysConfig.din[0].pullup ? INPUT_PULLUP : INPUT);
+    pinMode(PIN_NRF_DIN2, sysConfig.din[1].pullup ? INPUT_PULLUP : INPUT);
+
+    noInterrupts();
+    dinPeriodUs[0] = 0;
+    dinPeriodUs[1] = 0;
+    interrupts();
+
+    if (sysConfig.din[0].mode == DIN_MODE_RPM) {
+        attachInterrupt(digitalPinToInterrupt(PIN_NRF_DIN1), din1Isr, FALLING);
+    }
+    if (sysConfig.din[1].mode == DIN_MODE_RPM) {
+        attachInterrupt(digitalPinToInterrupt(PIN_NRF_DIN2), din2Isr, FALLING);
+    }
+}
+
+uint16_t getCurrentRpm() {
+    for (int idx = 0; idx < 2; idx++) {
+        if (sysConfig.din[idx].mode == DIN_MODE_RPM) {
+            noInterrupts();
+            uint32_t period = dinPeriodUs[idx];
+            uint32_t lastEdge = dinLastEdgeUs[idx];
+            interrupts();
+
+            if (period == 0 || (micros() - lastEdge) > 300000UL) {
+                return 0; // Двигатель остановлен
+            }
+            uint8_t p2r = sysConfig.din[idx].pulsesPer2Rev;
+            if (p2r == 0) p2r = 4;
+            return (uint16_t)(120000000UL / (period * (uint32_t)p2r));
+        }
+    }
+    return 0;
+}
+
+// ============================================================================
+// РАБОТА С НАСТРОЙКАМИ В INTERNALFS (/racedaq_cfg.bin)
+// ============================================================================
+void setDefaultSystemConfig() {
+    memset(&sysConfig, 0, sizeof(SystemConfig));
+    sysConfig.magic        = CONFIG_MAGIC;
+    sysConfig.version      = CONFIG_VERSION;
+    sysConfig.canSpeedKbps = 500;
+
+    // По умолчанию оба входа — дискретные с подтяжкой, профиль 4 цил. (4 имп / 2 об)
+    sysConfig.din[0] = { DIN_MODE_DIGITAL, 4, 1 };
+    sysConfig.din[1] = { DIN_MODE_DIGITAL, 4, 1 };
+
+    // Выходы по умолчанию в ручном режиме
+    sysConfig.dout[0].mode = OUT_MODE_MANUAL;
+    sysConfig.dout[1].mode = OUT_MODE_MANUAL;
+}
+
+void saveSystemConfigToFlash() {
+    InternalFS.remove("/racedaq_cfg.bin");
+    File file(InternalFS);
+    if (file.open("/racedaq_cfg.bin", FILE_O_WRITE)) {
+        file.write((uint8_t*)&sysConfig, sizeof(SystemConfig));
+        file.close();
+    }
+}
+
+void loadSystemConfigFromFlash() {
+    InternalFS.begin();
+    File file(InternalFS);
+    bool loaded = false;
+    if (file.open("/racedaq_cfg.bin", FILE_O_READ)) {
+        if (file.available() >= (int)sizeof(SystemConfig)) {
+            SystemConfig tmp;
+            file.read((uint8_t*)&tmp, sizeof(SystemConfig));
+            if (tmp.magic == CONFIG_MAGIC && tmp.version == CONFIG_VERSION) {
+                sysConfig = tmp;
+                loaded = true;
+            }
+        }
+        file.close();
+    }
+    if (!loaded) {
+        setDefaultSystemConfig();
+        saveSystemConfigToFlash();
+    }
+}
+
+void systemConfigWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr, uint8_t* data, uint16_t len) {
+    if (len != sizeof(SystemConfig)) return;
+    SystemConfig incoming;
+    memcpy(&incoming, data, sizeof(SystemConfig));
+    if (incoming.magic != CONFIG_MAGIC || incoming.version != CONFIG_VERSION) return;
+
+    bool canSpeedChanged = (sysConfig.canSpeedKbps != incoming.canSpeedKbps);
+    sysConfig = incoming;
+
+    memset(doutRuntime, 0, sizeof(doutRuntime));
+    memset(canSlotValues, 0, sizeof(canSlotValues));
+    applyDinHardwareConfig();
+
+#ifdef HAS_CAN_BUS
+    if (canSpeedChanged && isCanBusConnected) {
+        CAN.end();
+        isCanBusConnected = false; // Переинициализируется с новой скоростью в canBusLoop()
+    }
+#endif
+
+    saveSystemConfigToFlash();
+    systemConfigCharacteristic.write((uint8_t*)&sysConfig, sizeof(SystemConfig));
+}
+
+// ============================================================================
+// АНАЛОГОВЫЕ ВХОДЫ И ФИЛЬТРАЦИЯ АЦП
+// ============================================================================
+uint16_t readPinMillivoltsRaw(uint32_t ulPin) {
     int32_t raw = analogRead(ulPin);
     if (raw < 0) raw = 0;
     return (uint16_t)((raw * 3600UL) / 4095UL);
 }
 
-// Расчет реального напряжения на линии IGN (в мВ) с учетом R13=100K, R16=33K и R33=200K
+uint16_t smoothAdc(uint16_t prev, uint16_t sample, bool init) {
+    if (init) return sample;
+    return (uint16_t)((prev * 7UL + sample + 4UL) / 8UL);
+}
+
+void updateFilteredAdc() {
+    static uint32_t lastAdcMs = 0;
+    static bool isFirstSample = true;
+
+    uint32_t now = millis();
+    if (!isFirstSample && (now - lastAdcMs < 10)) return;
+    lastAdcMs = now;
+
+    uint16_t rawWat  = readPinMillivoltsRaw(PIN_NRF_T_WATR);
+    uint16_t rawOil  = readPinMillivoltsRaw(PIN_NRF_T_OIL);
+    uint16_t rawAin1 = (uint16_t)((readPinMillivoltsRaw(PIN_NRF_AIN1) * 151UL) / 100UL);
+    uint16_t rawAin2 = (uint16_t)((readPinMillivoltsRaw(PIN_NRF_AIN2) * 151UL) / 100UL);
+    uint16_t rawIgn  = readPinMillivoltsRaw(PIN_NRF_SENS);
+
+    filtMvWat    = smoothAdc(filtMvWat, rawWat, isFirstSample);
+    filtMvOil    = smoothAdc(filtMvOil, rawOil, isFirstSample);
+    filtMvAin1   = smoothAdc(filtMvAin1, rawAin1, isFirstSample);
+    filtMvAin2   = smoothAdc(filtMvAin2, rawAin2, isFirstSample);
+    filtMvIgnPin = smoothAdc(filtMvIgnPin, rawIgn, isFirstSample);
+
+    isFirstSample = false;
+}
+
 uint16_t readIgnRealMillivolts(uint16_t pinMv) {
     return (uint16_t)((pinMv * 453UL) / 100UL);
 }
 
-// Расчет температуры NTC-термистора в десятых долях градуса (0.1 °C)
 int16_t calcNtcTempTenthsC(uint16_t pinMv) {
     if (pinMv >= 3250 || pinMv <= 15) {
         return -400; // Обрыв или КЗ датчика (-40.0 °C)
@@ -213,20 +487,110 @@ int16_t calcNtcTempTenthsC(uint16_t pinMv) {
 }
 
 // ============================================================================
+// ДВИЖОК СЦЕНАРИЕВ ВЫХОДОВ DOUT1 И DOUT2 (С ГИСТЕРЕЗИСОМ И ЗАДЕРЖКОЙ)
+// ============================================================================
+int32_t getSignalValue(uint8_t source) {
+    uint32_t now = millis();
+    switch (source) {
+        case SRC_AIN1_MV:   return (int32_t)filtMvAin1;
+        case SRC_AIN2_MV:   return (int32_t)filtMvAin2;
+        case SRC_TWATR_C10: return (int32_t)calcNtcTempTenthsC(filtMvWat);
+        case SRC_TOIL_C10:  return (int32_t)calcNtcTempTenthsC(filtMvOil);
+        case SRC_EGT_C:     return (int32_t)(latestEgtRaw / 4);
+        case SRC_IGN_MV:    return (int32_t)readIgnRealMillivolts(filtMvIgnPin);
+        case SRC_DIN1:      return (sysConfig.din[0].mode == DIN_MODE_DIGITAL && digitalRead(PIN_NRF_DIN1) == LOW) ? 1 : 0;
+        case SRC_DIN2:      return (sysConfig.din[1].mode == DIN_MODE_DIGITAL && digitalRead(PIN_NRF_DIN2) == LOW) ? 1 : 0;
+        case SRC_RPM:       return (int32_t)getCurrentRpm();
+        case SRC_GPS_SPEED: return (int32_t)latestGpsSpeedKmh;
+        case SRC_CAN_SLOT0:
+        case SRC_CAN_SLOT1:
+        case SRC_CAN_SLOT2:
+        case SRC_CAN_SLOT3: {
+            uint8_t idx = source - SRC_CAN_SLOT0;
+            if (!sysConfig.canSlots[idx].enabled || (now - canSlotLastRxMs[idx]) > 1000UL) {
+                return 0; // Тайм-аут пакета CAN (защита от залипания старого значения)
+            }
+            return canSlotValues[idx];
+        }
+        default:
+            return 0;
+    }
+}
+
+bool evaluateCondition(const RuleCondition& cond, bool prevLatched) {
+    if (cond.source == SRC_NONE) return false;
+    int32_t val = getSignalValue(cond.source);
+    int32_t hyst = (int32_t)cond.hysteresis;
+
+    switch (cond.op) {
+        case OP_GT:
+            return prevLatched ? (val > (cond.threshold - hyst)) : (val > cond.threshold);
+        case OP_LT:
+            return prevLatched ? (val < (cond.threshold + hyst)) : (val < cond.threshold);
+        case OP_EQ:
+            return (val == cond.threshold);
+        default:
+            return false;
+    }
+}
+
+void evaluateDoutRulesLoop() {
+    uint32_t now = millis();
+
+    for (int i = 0; i < 2; i++) {
+        const DoutConfig& cfg = sysConfig.dout[i];
+        if (cfg.mode == OUT_MODE_MANUAL) continue;
+
+        RuleRuntimeState& rt = doutRuntime[i];
+        rt.latchedA = evaluateCondition(cfg.condA, rt.latchedA);
+
+        bool rawTrigger = false;
+        if (cfg.mode == OUT_MODE_SINGLE) {
+            rawTrigger = rt.latchedA;
+        } else if (cfg.mode == OUT_MODE_LOGIC_OR) {
+            rt.latchedB = evaluateCondition(cfg.condB, rt.latchedB);
+            rawTrigger = (rt.latchedA || rt.latchedB);
+        } else if (cfg.mode == OUT_MODE_LOGIC_AND) {
+            rt.latchedB = evaluateCondition(cfg.condB, rt.latchedB);
+            rawTrigger = (rt.latchedA && rt.latchedB);
+        }
+
+        uint16_t reqDelay = cfg.condA.delayMs;
+        if (rawTrigger) {
+            if (rt.activeSinceMs == 0) {
+                rt.activeSinceMs = now;
+            }
+            if ((now - rt.activeSinceMs) >= reqDelay) {
+                rt.outputActive = true;
+            }
+        } else {
+            rt.activeSinceMs = 0;
+            rt.outputActive = false;
+        }
+
+        bool finalPinState = (cfg.invert != 0) ? !rt.outputActive : rt.outputActive;
+        if (i == 0) {
+            setDout1(finalPinState);
+        } else {
+            setDout2(finalPinState);
+        }
+    }
+}
+
+// ============================================================================
 // КОНТРОЛЬ ЗАЖИГАНИЯ И ОТКЛЮЧЕНИЕ ПИТАНИЯ ПЛАТЫ (NRF_HOLD -> P0.30)
 // ============================================================================
 void powerHoldLoop() {
     static uint32_t ignLowSinceMs = 0;
-    uint16_t mvIgnPin = readPinMillivolts(PIN_NRF_SENS);
 
-    if (mvIgnPin < IGN_OFF_PIN_MV) {
+    if (filtMvIgnPin < IGN_OFF_PIN_MV) {
         if (ignLowSinceMs == 0) {
             ignLowSinceMs = millis();
         } else if (millis() - ignLowSinceMs >= IGN_OFF_DELAY_MS) {
             setDout1(false);
             setDout2(false);
             delay(50);
-            digitalWrite(PIN_NRF_HOLD, LOW); // Снимаем удержание с EN DC-DC SQ20953AIC
+            digitalWrite(PIN_NRF_HOLD, LOW);
             while (1) {
                 delay(100);
             }
@@ -337,19 +701,46 @@ void updateMax6675Egt() {
 #endif
 
 // ============================================================================
-// ФИЗИЧЕСКИЙ КОНТРОЛЛЕР CAN-ШИНЫ MCP2515 (D2) НА ПИНАХ P0.22 (CS) И P0.10 (INT)
+// ФИЗИЧЕСКИЙ КОНТРОЛЛЕР CAN-ШИНЫ MCP2515 (D2) + АВТОНОМНЫЕ CAN-СЛОТЫ
 // ============================================================================
 #ifdef HAS_CAN_BUS
-void canBusNotifyLatestPacket(BLECharacteristic* characteristic) {
-    ((uint32_t*)tempData)[0] = CAN.packetId();
-    int pos = 4;
-    int dataByte = CAN.read();
-    while (dataByte != -1 && pos < (int)sizeof(tempData)) {
-        tempData[pos] = (uint8_t)dataByte;
-        dataByte = CAN.read();
-        pos++;
+bool hasActiveCanSlots() {
+    for (int i = 0; i < 4; i++) {
+        if (sysConfig.canSlots[i].enabled) return true;
     }
-    characteristic->notify(tempData, pos);
+    return false;
+}
+
+long getConfiguredCanBaudrate() {
+    if (sysConfig.canSpeedKbps == 250)  return 250E3;
+    if (sysConfig.canSpeedKbps == 1000) return 1000E3;
+    return 500E3;
+}
+
+void processCanSlotsFromFrame(uint32_t packetId, const uint8_t* frameData, uint8_t frameLen) {
+    uint32_t now = millis();
+    for (int i = 0; i < 4; i++) {
+        const CanSignalSlot& slot = sysConfig.canSlots[i];
+        if (!slot.enabled || slot.canId != packetId) continue;
+        if (slot.startByte >= frameLen) continue;
+
+        bool bigEndian = (slot.flags & CAN_FLAG_BIG_ENDIAN) != 0;
+        bool isSigned  = (slot.flags & CAN_FLAG_SIGNED) != 0;
+        int32_t raw = 0;
+
+        if (slot.length == 2 && (slot.startByte + 1) < frameLen) {
+            uint16_t u16 = bigEndian
+                ? (((uint16_t)frameData[slot.startByte] << 8) | frameData[slot.startByte + 1])
+                : (((uint16_t)frameData[slot.startByte + 1] << 8) | frameData[slot.startByte]);
+            raw = isSigned ? (int32_t)(int16_t)u16 : (int32_t)u16;
+        } else {
+            uint8_t u8 = frameData[slot.startByte];
+            raw = isSigned ? (int32_t)(int8_t)u8 : (int32_t)u8;
+        }
+
+        canSlotValues[i]   = ((raw * (int32_t)slot.mul) / 100L) + (int32_t)slot.offset;
+        canSlotLastRxMs[i] = now;
+    }
 }
 
 void canBusSetup() {
@@ -359,15 +750,16 @@ void canBusSetup() {
 
 void canBusLoop() {
     static uint32_t lastCanRetryMs = 0;
+    bool needCan = Bluefruit.connected() || hasActiveCanSlots();
 
-    if (!isCanBusConnected && Bluefruit.connected()) {
+    if (!isCanBusConnected && needCan) {
         if (millis() - lastCanRetryMs >= 3000) {
             lastCanRetryMs = millis();
-            if (CAN.begin(500E3)) {
+            if (CAN.begin(getConfiguredCanBaudrate())) {
                 isCanBusConnected = true;
             }
         }
-    } else if (isCanBusConnected && !Bluefruit.connected()) {
+    } else if (isCanBusConnected && !needCan) {
         CAN.end();
         isCanBusConnected = false;
     }
@@ -376,10 +768,27 @@ void canBusLoop() {
         int packetSize = CAN.parsePacket();
         if (packetSize > 0) {
             uint32_t packetId = CAN.packetId();
-            PacketIdInfoItem* infoItem = canBusPacketIdInfo.findItem(packetId, canBusAllowUnknownPackets);
-            if (infoItem && infoItem->shouldNotify()) {
-                canBusNotifyLatestPacket(&canBusMainCharacteristic);
-                infoItem->markNotified();
+            uint8_t frameData[8];
+            uint8_t frameLen = 0;
+
+            int dataByte = CAN.read();
+            while (dataByte != -1 && frameLen < 8) {
+                frameData[frameLen++] = (uint8_t)dataByte;
+                dataByte = CAN.read();
+            }
+
+            // 1. Обновляем значения для автономных сценариев выходов (работает всегда)
+            processCanSlotsFromFrame(packetId, frameData, frameLen);
+
+            // 2. Если подключён телефон/планшет и ID разрешён фильтром — шлём по BLE
+            if (Bluefruit.connected()) {
+                PacketIdInfoItem* infoItem = canBusPacketIdInfo.findItem(packetId, canBusAllowUnknownPackets);
+                if (infoItem && infoItem->shouldNotify()) {
+                    ((uint32_t*)tempData)[0] = packetId;
+                    memcpy(&tempData[4], frameData, frameLen);
+                    canBusMainCharacteristic.notify(tempData, 4 + frameLen);
+                    infoItem->markNotified();
+                }
             }
         }
     }
@@ -424,9 +833,9 @@ void ioOutputWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr, uint8_t* d
     uint8_t outChannel = data[0];
     bool enable = (data[1] != 0);
     if (outChannel == 0 || outChannel == 1) {
-        setDout1(enable);
+        if (sysConfig.dout[0].mode == OUT_MODE_MANUAL) setDout1(enable);
     } else if (outChannel == 2) {
-        setDout2(enable);
+        if (sysConfig.dout[1].mode == OUT_MODE_MANUAL) setDout2(enable);
     }
 }
 
@@ -443,16 +852,16 @@ void sendVirtualCanPacket(uint32_t pid, const uint8_t* payload, uint8_t len) {
 
 #ifdef HAS_IO_CHANNELS
 void ioChannelsSetup() {
-    analogReference(AR_INTERNAL); // Диапазон 0..3600 мВ (Gain 1/6 от 0.6 В)
+    analogReference(AR_INTERNAL);
     analogReadResolution(12);
-
-    pinMode(PIN_NRF_DIN1, INPUT);
-    pinMode(PIN_NRF_DIN2, INPUT);
+    analogOversampling(16);
 
     pinMode(PIN_NRF_DOUT1, OUTPUT);
     pinMode(PIN_NRF_DOUT2, OUTPUT);
     setDout1(false);
     setDout2(false);
+
+    applyDinHardwareConfig();
 
     pinMode(PIN_EGT_CS, OUTPUT);
     digitalWrite(PIN_EGT_CS, HIGH);
@@ -464,6 +873,8 @@ void ioChannelsSetup() {
 
     canBusPacketIdInfo.reset();
     canBusPacketIdInfo.setDefaultNotifyInterval(50);
+
+    updateFilteredAdc();
 }
 
 void ioChannelsLoop() {
@@ -474,21 +885,18 @@ void ioChannelsLoop() {
     updateImuReadings();
 #endif
 
+    evaluateDoutRulesLoop(); // Сценарии работают автономно даже без телефона
+
     if (!Bluefruit.connected()) return;
 
-    // 1. Пакет 0x100 (256): Напряжения T_WATR, T_OIL, AIN1, AIN2 в мВ (uint16 Big-Endian)
+    // 1. Пакет 0x100 (256): Напряжения T_WATR, T_OIL, AIN1, AIN2 в мВ
     PacketIdInfoItem* itemAnalog = canBusPacketIdInfo.findItem(PID_ANALOG_VOLTAGES, canBusAllowUnknownPackets);
     if (itemAnalog && itemAnalog->shouldNotify()) {
-        uint16_t mvWat  = readPinMillivolts(PIN_NRF_T_WATR);
-        uint16_t mvOil  = readPinMillivolts(PIN_NRF_T_OIL);
-        uint16_t mvAin1 = (uint16_t)((readPinMillivolts(PIN_NRF_AIN1) * 151UL) / 100UL);
-        uint16_t mvAin2 = (uint16_t)((readPinMillivolts(PIN_NRF_AIN2) * 151UL) / 100UL);
-
         uint8_t payload[8] = {
-            (uint8_t)(mvWat >> 8),  (uint8_t)(mvWat & 0xFF),
-            (uint8_t)(mvOil >> 8),  (uint8_t)(mvOil & 0xFF),
-            (uint8_t)(mvAin1 >> 8), (uint8_t)(mvAin1 & 0xFF),
-            (uint8_t)(mvAin2 >> 8), (uint8_t)(mvAin2 & 0xFF)
+            (uint8_t)(filtMvWat >> 8),  (uint8_t)(filtMvWat & 0xFF),
+            (uint8_t)(filtMvOil >> 8),  (uint8_t)(filtMvOil & 0xFF),
+            (uint8_t)(filtMvAin1 >> 8), (uint8_t)(filtMvAin1 & 0xFF),
+            (uint8_t)(filtMvAin2 >> 8), (uint8_t)(filtMvAin2 & 0xFF)
         };
         sendVirtualCanPacket(PID_ANALOG_VOLTAGES, payload, 8);
         itemAnalog->markNotified();
@@ -497,10 +905,9 @@ void ioChannelsLoop() {
     // 2. Пакет 0x101 (257): Термопара EGT (0.25°C), напряжение IGN (мВ), маски DIN и DOUT
     PacketIdInfoItem* itemSys = canBusPacketIdInfo.findItem(PID_EGT_IGN_DIO, canBusAllowUnknownPackets);
     if (itemSys && itemSys->shouldNotify()) {
-        uint16_t mvIgnPin  = readPinMillivolts(PIN_NRF_SENS);
-        uint16_t mvIgnReal = readIgnRealMillivolts(mvIgnPin);
-        uint8_t din1 = (digitalRead(PIN_NRF_DIN1) == LOW) ? 1 : 0;
-        uint8_t din2 = (digitalRead(PIN_NRF_DIN2) == LOW) ? 1 : 0;
+        uint16_t mvIgnReal = readIgnRealMillivolts(filtMvIgnPin);
+        uint8_t din1 = (sysConfig.din[0].mode == DIN_MODE_DIGITAL && digitalRead(PIN_NRF_DIN1) == LOW) ? 1 : 0;
+        uint8_t din2 = (sysConfig.din[1].mode == DIN_MODE_DIGITAL && digitalRead(PIN_NRF_DIN2) == LOW) ? 1 : 0;
 
         uint8_t payload[6] = {
             (uint8_t)(latestEgtRaw >> 8), (uint8_t)(latestEgtRaw & 0xFF),
@@ -512,18 +919,20 @@ void ioChannelsLoop() {
         itemSys->markNotified();
     }
 
-    // 3. Пакет 0x102 (258): Цифровые статусы по отдельным байтам (0 или 1)
+    // 3. Пакет 0x102 (258): Побайтные статусы DIN1, DIN2, DOUT1, DOUT2, IGN + RPM (uint16)
     PacketIdInfoItem* itemDig = canBusPacketIdInfo.findItem(PID_DIGITAL_BYTES, canBusAllowUnknownPackets);
     if (itemDig && itemDig->shouldNotify()) {
-        uint16_t mvIgnPin = readPinMillivolts(PIN_NRF_SENS);
-        uint8_t payload[5] = {
-            (uint8_t)((digitalRead(PIN_NRF_DIN1) == LOW) ? 1 : 0),
-            (uint8_t)((digitalRead(PIN_NRF_DIN2) == LOW) ? 1 : 0),
+        uint16_t currentRpm = getCurrentRpm();
+        uint8_t payload[7] = {
+            (uint8_t)((sysConfig.din[0].mode == DIN_MODE_DIGITAL && digitalRead(PIN_NRF_DIN1) == LOW) ? 1 : 0),
+            (uint8_t)((sysConfig.din[1].mode == DIN_MODE_DIGITAL && digitalRead(PIN_NRF_DIN2) == LOW) ? 1 : 0),
             dout1State,
             dout2State,
-            (uint8_t)((mvIgnPin >= IGN_OFF_PIN_MV) ? 1 : 0)
+            (uint8_t)((filtMvIgnPin >= IGN_OFF_PIN_MV) ? 1 : 0),
+            (uint8_t)(currentRpm >> 8),
+            (uint8_t)(currentRpm & 0xFF)
         };
-        sendVirtualCanPacket(PID_DIGITAL_BYTES, payload, 5);
+        sendVirtualCanPacket(PID_DIGITAL_BYTES, payload, 7);
         itemDig->markNotified();
     }
 
@@ -545,8 +954,8 @@ void ioChannelsLoop() {
     // 5. Пакет 0x104 (260): Готовые температуры T_WATR и T_OIL (в 0.1 °C) + GyroX и GyroY (в 0.1 °/с)
     PacketIdInfoItem* itemTemp = canBusPacketIdInfo.findItem(PID_NTC_TEMPS_GYRO, canBusAllowUnknownPackets);
     if (itemTemp && itemTemp->shouldNotify()) {
-        int16_t tWatTenths = calcNtcTempTenthsC(readPinMillivolts(PIN_NRF_T_WATR));
-        int16_t tOilTenths = calcNtcTempTenthsC(readPinMillivolts(PIN_NRF_T_OIL));
+        int16_t tWatTenths = calcNtcTempTenthsC(filtMvWat);
+        int16_t tOilTenths = calcNtcTempTenthsC(filtMvOil);
 
         uint8_t payload[8] = {
             (uint8_t)(tWatTenths >> 8),    (uint8_t)(tWatTenths & 0xFF),
@@ -557,6 +966,55 @@ void ioChannelsLoop() {
         sendVirtualCanPacket(PID_NTC_TEMPS_GYRO, payload, 8);
         itemTemp->markNotified();
     }
+}
+#endif
+
+#ifdef HAS_GPS
+void applyGpsRate(uint8_t hz) {
+    if (hz < 1) hz = 1;
+    if (hz > 25) hz = 25;
+    currentGpsHz = hz;
+
+    uint16_t measRateMs = 1000 / hz;
+    uint8_t cfgRate[] = {
+        (uint8_t)(measRateMs & 0xFF),
+        (uint8_t)((measRateMs >> 8) & 0xFF),
+        0x01, 0x00,
+        0x01, 0x00
+    };
+    sendUbxCommand(0x06, 0x08, cfgRate, sizeof(cfgRate));
+    gpsRateCharacteristic.write8(currentGpsHz);
+}
+
+void saveGpsRateToFlash(uint8_t hz) {
+    InternalFS.remove("/gps_hz.bin");
+    File file(InternalFS);
+    if (file.open("/gps_hz.bin", FILE_O_WRITE)) {
+        file.write(&hz, 1);
+        file.close();
+    }
+}
+
+uint8_t loadGpsRateFromFlash() {
+    File file(InternalFS);
+    uint8_t hz = 10;
+    if (file.open("/gps_hz.bin", FILE_O_READ)) {
+        if (file.available() >= 1) {
+            uint8_t saved = file.read();
+            if (saved >= 1 && saved <= 25) hz = saved;
+        }
+        file.close();
+    }
+    return hz;
+}
+
+void gpsRateWriteCallback(uint16_t conn_hdl, BLECharacteristic* chr, uint8_t* data, uint16_t len) {
+    if (len < 1) return;
+    uint8_t requestedHz = data[0];
+    if (requestedHz < 1 || requestedHz > 25) return;
+
+    applyGpsRate(requestedHz);
+    saveGpsRateToFlash(requestedHz);
 }
 #endif
 
@@ -583,6 +1041,13 @@ void bluetoothSetupMainService(void) {
     ioOutputControlCharacteristic.setWriteCallback(ioOutputWriteCallback);
     ioOutputControlCharacteristic.begin();
 
+    systemConfigCharacteristic.setProperties(CHR_PROPS_READ | CHR_PROPS_WRITE);
+    systemConfigCharacteristic.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+    systemConfigCharacteristic.setFixedLen(sizeof(SystemConfig));
+    systemConfigCharacteristic.setWriteCallback(systemConfigWriteCallback);
+    systemConfigCharacteristic.begin();
+    systemConfigCharacteristic.write((uint8_t*)&sysConfig, sizeof(SystemConfig));
+
 #ifdef HAS_GPS
     gpsMainCharacteristic.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     gpsMainCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
@@ -591,6 +1056,13 @@ void bluetoothSetupMainService(void) {
     gpsTimeCharacteristic.setProperties(CHR_PROPS_NOTIFY | CHR_PROPS_READ);
     gpsTimeCharacteristic.setPermission(SECMODE_OPEN, SECMODE_NO_ACCESS);
     gpsTimeCharacteristic.begin();
+
+    gpsRateCharacteristic.setProperties(CHR_PROPS_READ | CHR_PROPS_WRITE);
+    gpsRateCharacteristic.setPermission(SECMODE_OPEN, SECMODE_OPEN);
+    gpsRateCharacteristic.setFixedLen(1);
+    gpsRateCharacteristic.setWriteCallback(gpsRateWriteCallback);
+    gpsRateCharacteristic.begin();
+    gpsRateCharacteristic.write8(currentGpsHz);
 #endif
 }
 
@@ -653,8 +1125,8 @@ void gpsSetup() {
     Serial.begin(230400);
     delay(200);
 
-    uint8_t cfgRate[] = { 0x64, 0x00, 0x01, 0x00, 0x01, 0x00 };
-    sendUbxCommand(0x06, 0x08, cfgRate, sizeof(cfgRate));
+    uint8_t savedHz = loadGpsRateFromFlash();
+    applyGpsRate(savedHz);
     delay(50);
 
     uint8_t cfgMsg[] = { 0x01, 0x07, 0x01 };
@@ -764,6 +1236,7 @@ void gpsLoop() {
                             max(0, (int)round((altM + 500.f) * 10.f)) & 0x7FFF;
 
                         float speedKmh = (pvt.fixType >= 2) ? (pvt.gSpeed * 0.0036f) : 0.0f;
+                        latestGpsSpeedKmh = (uint16_t)roundf(speedKmh);
                         int speed = speedKmh > 600.f ?
                             ((max(0, (int)round(speedKmh * 10.f))) & 0x7FFF) | 0x8000 :
                             (max(0, (int)round(speedKmh * 100.f))) & 0x7FFF;
@@ -828,6 +1301,7 @@ void setup() {
     while (!Serial);
 #endif
 
+    loadSystemConfigFromFlash();
     bluetoothStart();
 
 #ifdef HAS_IO_CHANNELS
@@ -845,6 +1319,7 @@ void setup() {
 }
 
 void loop() {
+    updateFilteredAdc();
     powerHoldLoop();
 
 #ifdef HAS_GPS
