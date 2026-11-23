@@ -583,7 +583,7 @@ void updateFilteredAdc() {
 }
 
 uint16_t readIgnRealMillivolts(uint16_t pinMv) {
-    int32_t mv = ((int32_t)pinMv * 453L) / 100L - 1200L;
+    int32_t mv = ((int32_t)pinMv * 520L) / 100L;
     return (mv > 0) ? (uint16_t)mv : 0;
 }
 
