@@ -24,21 +24,14 @@ private data class GaugeItem(
     val isAlarm: Boolean
 )
 
-private fun checkAnalogAlarm(profile: AnalogSensorProfile, value: Float, rpm: Int): Boolean {
-    val nameLower = profile.name.lowercase()
-    return when {
-        "масл" in nameLower -> rpm > 1500 && value < 1.2f
-        "буст" in nameLower -> value > 1.8f
-        else -> false
-    }
-}
-
 @Composable
 fun DashboardScreen(
     state: TelemetryState,
     config: SystemConfig,
     ain1Profile: AnalogSensorProfile,
     ain2Profile: AnalogSensorProfile,
+    alarmLimits: DashboardAlarmLimits = DashboardAlarmLimits(),
+    visibility: DashboardVisibility = DashboardVisibility(),
     deviceInfo: DeviceInfoPacket = DeviceInfoPacket(),
     onToggleDout: (channel: Int, enable: Boolean) -> Unit,
     onOpenConfig: () -> Unit
@@ -46,44 +39,72 @@ fun DashboardScreen(
     val ain1Val = ain1Profile.mvToValue(state.mvAin1)
     val ain2Val = ain2Profile.mvToValue(state.mvAin2)
 
-    val gauges = listOf(
-        GaugeItem(
-            title = "ТЕМП. ОЖ (T_WATR)",
-            value = if (state.tempWatrC <= -39f) "ОБРЫВ" else "${"%.1f".format(state.tempWatrC)}",
-            unit = "°C",
-            isAlarm = state.tempWatrC > 102f
-        ),
-        GaugeItem(
-            title = "ТЕМП. МАСЛА (T_OIL)",
-            value = if (state.tempOilC <= -39f) "ОБРЫВ" else "${"%.1f".format(state.tempOilC)}",
-            unit = "°C",
-            isAlarm = state.tempOilC > 125f
-        ),
-        GaugeItem(
-            title = "ВЫХЛОП (EGT)",
-            value = state.egtC?.let { "${it.toInt()}" } ?: "ОБРЫВ",
-            unit = "°C",
-            isAlarm = (state.egtC ?: 0f) > 900f
-        ),
-        GaugeItem(
-            title = ain1Profile.name.uppercase(),
-            value = "${"%.2f".format(ain1Val)}",
-            unit = ain1Profile.unit,
-            isAlarm = checkAnalogAlarm(ain1Profile, ain1Val, state.rpm)
-        ),
-        GaugeItem(
-            title = ain2Profile.name.uppercase(),
-            value = "${"%.2f".format(ain2Val)}",
-            unit = ain2Profile.unit,
-            isAlarm = checkAnalogAlarm(ain2Profile, ain2Val, state.rpm)
-        ),
-        GaugeItem(
-            title = "GPS / G-FORCE",
-            value = "${state.gpsSpeedKmh.toInt()}",
-            unit = "км/ч (${"%.1f".format(state.accXg)}/${"%.1f".format(state.accYg)}G)",
-            isAlarm = false
-        )
-    )
+    val validWatr = if (state.tempWatrC <= -39f) null else state.tempWatrC
+    val validOil = if (state.tempOilC <= -39f) null else state.tempOilC
+    val isIgnAlarm = state.connected && alarmLimits.ign.isTriggered(state.ignVolts)
+
+    val gauges = buildList {
+        if (visibility.showTempWat) {
+            add(
+                GaugeItem(
+                    title = "ТЕМП. ОЖ (T_WATR)",
+                    value = validWatr?.let { "${"%.1f".format(it)}" } ?: "ОБРЫВ",
+                    unit = "°C",
+                    isAlarm = alarmLimits.tempWat.isTriggered(validWatr)
+                )
+            )
+        }
+        if (visibility.showTempOil) {
+            add(
+                GaugeItem(
+                    title = "ТЕМП. МАСЛА (T_OIL)",
+                    value = validOil?.let { "${"%.1f".format(it)}" } ?: "ОБРЫВ",
+                    unit = "°C",
+                    isAlarm = alarmLimits.tempOil.isTriggered(validOil)
+                )
+            )
+        }
+        if (visibility.showEgt) {
+            add(
+                GaugeItem(
+                    title = "ВЫХЛОП (EGT)",
+                    value = state.egtC?.let { "${it.toInt()}" } ?: "ОБРЫВ",
+                    unit = "°C",
+                    isAlarm = alarmLimits.egt.isTriggered(state.egtC)
+                )
+            )
+        }
+        if (visibility.showAin1) {
+            add(
+                GaugeItem(
+                    title = ain1Profile.name.uppercase(),
+                    value = "${"%.2f".format(ain1Val)}",
+                    unit = ain1Profile.unit,
+                    isAlarm = alarmLimits.ain1.isTriggered(ain1Val)
+                )
+            )
+        }
+        if (visibility.showAin2) {
+            add(
+                GaugeItem(
+                    title = ain2Profile.name.uppercase(),
+                    value = "${"%.2f".format(ain2Val)}",
+                    unit = ain2Profile.unit,
+                    isAlarm = alarmLimits.ain2.isTriggered(ain2Val)
+                )
+            )
+        }
+        if (visibility.showGps) {
+            add(
+                GaugeItem(
+                    title = "GPS / G-FORCE",
+                    value = "${state.gpsSpeedKmh.toInt()}",
+                    unit = "км/ч (${"%.1f".format(state.accXg)}/${"%.1f".format(state.accYg)}G)",
+                    isAlarm = false
+                )
+            )
+        }
+    }
 
     val fwShort = deviceInfo.fwVersion.substringBefore(" (")
     val versionBadge = if (state.connected) {
@@ -131,13 +152,15 @@ fun DashboardScreen(
             verticalArrangement = Arrangement.spacedBy(gridGap)
         ) {
             // 1. ВЕРХНЯЯ ПАНЕЛЬ: ШКАЛА ОБОРОТОВ + СТАТУСЫ И ВЕРСИИ HW/FW
-            RpmShiftBar(
-                rpm = state.rpm,
-                maxRpm = 8000,
-                shiftRpm = 6800,
-                barHeight = if (isCompactHeight) 34.dp else if (isPortraitPhone) 42.dp else 48.dp,
-                fontSize = if (isCompactHeight) 18.sp else if (isPortraitPhone) 20.sp else 24.sp
-            )
+            if (visibility.showRpm) {
+                RpmShiftBar(
+                    rpm = state.rpm,
+                    maxRpm = alarmLimits.maxRpm.coerceAtLeast(1000),
+                    shiftRpm = alarmLimits.shiftRpm.coerceAtLeast(500),
+                    barHeight = if (isCompactHeight) 34.dp else if (isPortraitPhone) 42.dp else 48.dp,
+                    fontSize = if (isCompactHeight) 18.sp else if (isPortraitPhone) 20.sp else 24.sp
+                )
+            }
 
             if (isPortraitPhone) {
                 Row(
@@ -156,7 +179,8 @@ fun DashboardScreen(
                         )
                         Text(
                             text = "GPS: ${state.gpsSats} спутн. | IGN: ${"%.1f".format(state.ignVolts)} В",
-                            color = Color(0xFFB0BEC5),
+                            color = if (isIgnAlarm) Color(0xFFFF5252) else Color(0xFFB0BEC5),
+                            fontWeight = if (isIgnAlarm) FontWeight.Bold else FontWeight.Normal,
                             fontSize = 12.sp,
                             maxLines = 1,
                             overflow = TextOverflow.Ellipsis
@@ -187,7 +211,8 @@ fun DashboardScreen(
                     )
                     Text(
                         text = "GPS: ${state.gpsSats} спутн. | IGN: ${"%.1f".format(state.ignVolts)} В",
-                        color = Color(0xFFB0BEC5),
+                        color = if (isIgnAlarm) Color(0xFFFF5252) else Color(0xFFB0BEC5),
+                        fontWeight = if (isIgnAlarm) FontWeight.Bold else FontWeight.Normal,
                         fontSize = if (isCompactHeight) 12.sp else 14.sp,
                         maxLines = 1
                     )
@@ -209,74 +234,80 @@ fun DashboardScreen(
                 }
             }
 
-            // 2. СЕТКА ПРИБОРОВ: 2 КОЛОНКИ x 3 РЯДА НА ТЕЛЕФОНЕ ИЛИ 3 КОЛОНКИ x 2 РЯДА НА ПЛАНШЕТЕ
+            // 2. СЕТКА ПРИБОРОВ (ТОЛЬКО ВКЛЮЧЁННЫЕ ВИДЖЕТЫ)
             val columns = if (isPortraitPhone) 2 else 3
             val rows = gauges.chunked(columns)
 
-            Column(
-                modifier = Modifier
-                    .weight(1f)
-                    .fillMaxWidth(),
-                verticalArrangement = Arrangement.spacedBy(gridGap)
-            ) {
-                rows.forEach { rowItems ->
-                    Row(
-                        modifier = Modifier
-                            .weight(1f)
-                            .fillMaxWidth(),
-                        horizontalArrangement = Arrangement.spacedBy(gridGap)
-                    ) {
-                        rowItems.forEach { item ->
-                            GaugeTile(
-                                modifier = Modifier
-                                    .weight(1f)
-                                    .fillMaxHeight(),
-                                title = item.title,
-                                value = item.value,
-                                unit = item.unit,
-                                isAlarm = item.isAlarm,
-                                tilePad = tilePad,
-                                titleSize = titleSize,
-                                valueSize = valueSize,
-                                unitSize = unitSize
-                            )
+            if (rows.isNotEmpty()) {
+                Column(
+                    modifier = Modifier
+                        .weight(1f)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(gridGap)
+                ) {
+                    rows.forEach { rowItems ->
+                        Row(
+                            modifier = Modifier
+                                .weight(1f)
+                                .fillMaxWidth(),
+                            horizontalArrangement = Arrangement.spacedBy(gridGap)
+                        ) {
+                            rowItems.forEach { item ->
+                                GaugeTile(
+                                    modifier = Modifier
+                                        .weight(1f)
+                                        .fillMaxHeight(),
+                                    title = item.title,
+                                    value = item.value,
+                                    unit = item.unit,
+                                    isAlarm = item.isAlarm,
+                                    tilePad = tilePad,
+                                    titleSize = titleSize,
+                                    valueSize = valueSize,
+                                    unitSize = unitSize
+                                )
+                            }
                         }
                     }
                 }
+            } else {
+                Spacer(modifier = Modifier.weight(1f))
             }
 
             // 3. НИЖНЯЯ ПАНЕЛЬ УПРАВЛЕНИЯ СИЛОВЫМИ ВЫХОДАМИ DOUT1 И DOUT2
-            val doutHeight = when {
-                isCompactHeight -> 42.dp
-                isPortraitPhone -> 52.dp
-                else -> 64.dp
-            }
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(doutHeight),
-                horizontalArrangement = Arrangement.spacedBy(gridGap)
-            ) {
-                DoutControlButton(
+            if (visibility.showDout) {
+                val doutHeight = when {
+                    isCompactHeight -> 42.dp
+                    isPortraitPhone -> 52.dp
+                    else -> 64.dp
+                }
+                Row(
                     modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    label = "DOUT 1",
-                    isActive = state.dout1,
-                    isAuto = config.dout1.mode != OutputMode.MANUAL,
-                    compact = isPortraitPhone || isCompactHeight,
-                    onClick = { onToggleDout(1, !state.dout1) }
-                )
-                DoutControlButton(
-                    modifier = Modifier
-                        .weight(1f)
-                        .fillMaxHeight(),
-                    label = "DOUT 2",
-                    isActive = state.dout2,
-                    isAuto = config.dout2.mode != OutputMode.MANUAL,
-                    compact = isPortraitPhone || isCompactHeight,
-                    onClick = { onToggleDout(2, !state.dout2) }
-                )
+                        .fillMaxWidth()
+                        .height(doutHeight),
+                    horizontalArrangement = Arrangement.spacedBy(gridGap)
+                ) {
+                    DoutControlButton(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        label = "DOUT 1",
+                        isActive = state.dout1,
+                        isAuto = config.dout1.mode != OutputMode.MANUAL,
+                        compact = isPortraitPhone || isCompactHeight,
+                        onClick = { onToggleDout(1, !state.dout1) }
+                    )
+                    DoutControlButton(
+                        modifier = Modifier
+                            .weight(1f)
+                            .fillMaxHeight(),
+                        label = "DOUT 2",
+                        isActive = state.dout2,
+                        isAuto = config.dout2.mode != OutputMode.MANUAL,
+                        compact = isPortraitPhone || isCompactHeight,
+                        onClick = { onToggleDout(2, !state.dout2) }
+                    )
+                }
             }
         }
     }

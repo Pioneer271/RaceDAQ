@@ -287,11 +287,35 @@ data class AnalogSensorProfile(
     }
 }
 
-val ANALOG_SENSOR_PRESETS = listOf(
-    "Буст" to AnalogSensorProfile("Буст", "бар", 500, -1.0f, 4500, 2.0f),
-    "Разряжение" to AnalogSensorProfile("Разряжение", "кПа", 400, 10.0f, 4650, 105.0f),
-    "Давл. масла" to AnalogSensorProfile("Давление масла", "бар", 500, 0.0f, 4500, 10.0f),
-    "AFR Innovate" to AnalogSensorProfile("AFR (Innovate)", "AFR", 0, 7.35f, 5000, 22.39f)
+data class AnalogSensorCategory(
+    val title: String,
+    val sensors: List<Pair<String, AnalogSensorProfile>>
+)
+
+val ANALOG_SENSOR_CATEGORIES = listOf(
+    AnalogSensorCategory(
+        title = "Давл. впуск",
+        sensors = listOf(
+            "Bosch 3 bar" to AnalogSensorProfile("Давление наддува", "бар", 400, -0.8f, 4650, 2.0f),
+            "MPX4250" to AnalogSensorProfile("Давление наддува", "бар", 200, -0.8f, 4800, 1.5f),
+            "Belais 3 bar" to AnalogSensorProfile("Давление наддува", "бар", 1000, 0.0f, 4500, 3.0f),
+            "Атмо 1 bar" to AnalogSensorProfile("ДАД (впуск)", "кПа", 400, 10.0f, 4650, 105.0f)
+        )
+    ),
+    AnalogSensorCategory(
+        title = "ШЛЗ (AFR)",
+        sensors = listOf(
+            "Innovate LC-2" to AnalogSensorProfile("AFR (Innovate)", "AFR", 0, 7.35f, 5000, 22.39f),
+            "AEM X-Series" to AnalogSensorProfile("AFR (AEM)", "AFR", 500, 8.5f, 4500, 18.0f)
+        )
+    ),
+    AnalogSensorCategory(
+        title = "Давл. масла / топлива",
+        sensors = listOf(
+            "0–10 бар (0.5–4.5В)" to AnalogSensorProfile("Давление масла", "бар", 500, 0.0f, 4500, 10.0f),
+            "0–5 бар (0.5–4.5В)" to AnalogSensorProfile("Давление топлива", "бар", 500, 0.0f, 4500, 5.0f)
+        )
+    )
 )
 
 data class DeviceInfoPacket(
@@ -339,3 +363,36 @@ data class DeviceInfoPacket(
         }
     }
 }
+data class AlarmLimit(
+    val enabled: Boolean = true,
+    val min: Float? = null,
+    val max: Float? = null
+) {
+    fun isTriggered(value: Float?): Boolean {
+        if (!enabled || value == null || value.isNaN()) return false
+        if (min != null && value < min) return true
+        if (max != null && value > max) return true
+        return false
+    }
+}
+
+data class DashboardAlarmLimits(
+    val tempWat: AlarmLimit = AlarmLimit(enabled = true, min = null, max = 102f),
+    val tempOil: AlarmLimit = AlarmLimit(enabled = true, min = null, max = 125f),
+    val egt: AlarmLimit = AlarmLimit(enabled = true, min = null, max = 900f),
+    val ain1: AlarmLimit = AlarmLimit(enabled = true, min = 1.2f, max = null),
+    val ain2: AlarmLimit = AlarmLimit(enabled = true, min = null, max = 1.8f),
+    val ign: AlarmLimit = AlarmLimit(enabled = true, min = 12.0f, max = 15.2f),
+    val shiftRpm: Int = 6800,
+    val maxRpm: Int = 8000
+)
+data class DashboardVisibility(
+    val showRpm: Boolean = true,
+    val showTempWat: Boolean = true,
+    val showTempOil: Boolean = true,
+    val showEgt: Boolean = true,
+    val showAin1: Boolean = true,
+    val showAin2: Boolean = true,
+    val showGps: Boolean = true,
+    val showDout: Boolean = true
+)

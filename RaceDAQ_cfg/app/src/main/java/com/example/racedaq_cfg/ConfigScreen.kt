@@ -1,5 +1,7 @@
 package com.example.racedaq_cfg
 
+import android.content.Context
+import android.os.Build
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -17,6 +19,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.SolidColor
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -33,9 +36,13 @@ fun ConfigScreen(
     currentGpsHz: Int,
     ain1Profile: AnalogSensorProfile,
     ain2Profile: AnalogSensorProfile,
+    alarmLimits: DashboardAlarmLimits = DashboardAlarmLimits(),
     deviceInfo: DeviceInfoPacket = DeviceInfoPacket(),
     onSaveSystemConfig: (SystemConfig) -> Unit,
     onSaveAinProfiles: (AnalogSensorProfile, AnalogSensorProfile) -> Unit,
+    onSaveAlarmLimits: (DashboardAlarmLimits) -> Unit = {},
+    visibility: DashboardVisibility = DashboardVisibility(),
+    onSaveVisibility: (DashboardVisibility) -> Unit = {},
     onSetGpsRate: (Int) -> Unit,
     onBack: () -> Unit
 ) {
@@ -44,6 +51,8 @@ fun ConfigScreen(
     var draftConfig by remember(currentConfig) { mutableStateOf(currentConfig) }
     var draftAin1 by remember(ain1Profile) { mutableStateOf(ain1Profile) }
     var draftAin2 by remember(ain2Profile) { mutableStateOf(ain2Profile) }
+    var draftLimits by remember(alarmLimits) { mutableStateOf(alarmLimits) }
+    var draftVisibility by remember(visibility) { mutableStateOf(visibility) }
     var selectedTab by remember { mutableIntStateOf(0) }
 
     BoxWithConstraints(
@@ -98,6 +107,8 @@ fun ConfigScreen(
                 Button(
                     onClick = {
                         onSaveAinProfiles(draftAin1, draftAin2)
+                        onSaveAlarmLimits(draftLimits)
+                        onSaveVisibility(draftVisibility)
                         onSaveSystemConfig(draftConfig)
                     },
                     contentPadding = PaddingValues(horizontal = 14.dp, vertical = 8.dp),
@@ -191,6 +202,12 @@ fun ConfigScreen(
                         connected = latestTelemetry.connected,
                         currentGpsHz = currentGpsHz,
                         deviceInfo = deviceInfo,
+                        ain1 = draftAin1,
+                        ain2 = draftAin2,
+                        limits = draftLimits,
+                        visibility = draftVisibility,
+                        onLimitsChange = { draftLimits = it },
+                        onVisibilityChange = { draftVisibility = it },
                         onSetGpsRate = onSetGpsRate
                     )
                 }
@@ -480,12 +497,40 @@ private fun AinCard(
             Text(liveTextProvider(), color = Color(0xFF00E676), fontWeight = FontWeight.SemiBold, fontSize = 12.sp)
         }
 
+        // Автоматически определяем стартовую категорию по текущему профилю датчика
+        var selectedCategoryIdx by remember {
+            val foundIdx = ANALOG_SENSOR_CATEGORIES.indexOfFirst { cat ->
+                cat.sensors.any { it.second.name.equals(profile.name, ignoreCase = true) }
+            }
+            mutableIntStateOf(if (foundIdx >= 0) foundIdx else 0)
+        }
+
+        // 1-й ряд: Категории (Давл. впуск, ШЛЗ, Давл. масла...)
         Row(
             modifier = Modifier.horizontalScroll(rememberScrollState()),
             horizontalArrangement = Arrangement.spacedBy(6.dp)
         ) {
-            ANALOG_SENSOR_PRESETS.forEach { (chipLabel, preset) ->
-                val isSelected = profile.name.equals(preset.name, ignoreCase = true)
+            ANALOG_SENSOR_CATEGORIES.forEachIndexed { index, category ->
+                FastChip(
+                    selected = selectedCategoryIdx == index,
+                    text = category.title,
+                    fontSize = 11.sp,
+                    bold = selectedCategoryIdx == index,
+                    onClick = { selectedCategoryIdx = index }
+                )
+            }
+        }
+
+        // 2-й ряд: Конкретные модели внутри выбранной категории
+        val currentSensors = ANALOG_SENSOR_CATEGORIES.getOrNull(selectedCategoryIdx)?.sensors.orEmpty()
+        Row(
+            modifier = Modifier.horizontalScroll(rememberScrollState()),
+            horizontalArrangement = Arrangement.spacedBy(6.dp)
+        ) {
+            currentSensors.forEach { (chipLabel, preset) ->
+                val isSelected = profile.name.equals(preset.name, ignoreCase = true) &&
+                        profile.v1Mv == preset.v1Mv &&
+                        profile.v2Mv == preset.v2Mv
                 FastChip(
                     selected = isSelected,
                     text = chipLabel,
@@ -1045,15 +1090,24 @@ private fun CanTab(
 }
 
 // ============================================================================
-// ВКЛАДКА 4: ЧАСТОТА GPS, ВЕРСИИ ПЛАТЫ/ПО И ОБСЛУЖИВАНИЕ
+// ВКЛАДКА 4: ЧАСТОТА GPS, ЛИМИТЫ ПРИБОРКИ, ВЕРСИИ ПЛАТЫ/ПО И ОБСЛУЖИВАНИЕ
 // ============================================================================
 @Composable
 private fun SystemTab(
     connected: Boolean,
     currentGpsHz: Int,
     deviceInfo: DeviceInfoPacket,
+    ain1: AnalogSensorProfile,
+    ain2: AnalogSensorProfile,
+    limits: DashboardAlarmLimits,
+    visibility: DashboardVisibility,
+    onLimitsChange: (DashboardAlarmLimits) -> Unit,
+    onVisibilityChange: (DashboardVisibility) -> Unit,
     onSetGpsRate: (Int) -> Unit
 ) {
+    val context = LocalContext.current
+    val appVersion = remember(context) { getAppVersionString(context) }
+
     Column(
         modifier = Modifier
             .fillMaxSize()
@@ -1068,6 +1122,11 @@ private fun SystemTab(
             verticalArrangement = Arrangement.spacedBy(6.dp)
         ) {
             Text("ИНФОРМАЦИЯ ОБ УСТРОЙСТВЕ", color = Color(0xFF4FC3F7), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Text(
+                text = "Версия приложения: $appVersion",
+                color = Color.White,
+                fontSize = 13.sp
+            )
             Text(
                 text = "Аппаратная ревизия (HW): ${if (connected) deviceInfo.hwVersion else "Нет подключения"}",
                 color = Color.White,
@@ -1087,27 +1146,213 @@ private fun SystemTab(
             }
         }
 
-        Text("ЧАСТОТА ОБНОВЛЕНИЯ GPS", color = Color(0xFF4FC3F7), fontWeight = FontWeight.Bold)
-        Row(
-            modifier = Modifier.horizontalScroll(rememberScrollState()),
-            horizontalArrangement = Arrangement.spacedBy(8.dp)
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF2A313D), RoundedCornerShape(8.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
         ) {
-            listOf(1, 5, 10, 20, 25).forEach { hz ->
-                FastChip(
-                    selected = currentGpsHz == hz,
-                    enabled = connected,
-                    text = "$hz Гц",
-                    fontSize = 14.sp,
-                    bold = true,
-                    onClick = { onSetGpsRate(hz) }
+            Text("ЧАСТОТА ОБНОВЛЕНИЯ GPS", color = Color(0xFF4FC3F7), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                listOf(1, 5, 10, 20, 25).forEach { hz ->
+                    FastChip(
+                        selected = currentGpsHz == hz,
+                        enabled = connected,
+                        text = "$hz Гц",
+                        fontSize = 14.sp,
+                        bold = true,
+                        onClick = { onSetGpsRate(hz) }
+                    )
+                }
+            }
+            Text(
+                text = "Выбранная частота сразу записывается во внутреннюю флеш-память и применяется при каждом включении зажигания.",
+                color = Color(0xFF90A4AE),
+                fontSize = 13.sp
+            )
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF2A313D), RoundedCornerShape(8.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(8.dp)
+        ) {
+            Text("ВИДЖЕТЫ НА ПРИБОРКЕ", color = Color(0xFF4FC3F7), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FastChip(selected = visibility.showTempWat, text = "T_WATR", onClick = { onVisibilityChange(visibility.copy(showTempWat = !visibility.showTempWat)) })
+                FastChip(selected = visibility.showTempOil, text = "T_OIL", onClick = { onVisibilityChange(visibility.copy(showTempOil = !visibility.showTempOil)) })
+                FastChip(selected = visibility.showEgt, text = "EGT", onClick = { onVisibilityChange(visibility.copy(showEgt = !visibility.showEgt)) })
+                FastChip(selected = visibility.showGps, text = "GPS / G", onClick = { onVisibilityChange(visibility.copy(showGps = !visibility.showGps)) })
+            }
+            Row(
+                modifier = Modifier.horizontalScroll(rememberScrollState()),
+                horizontalArrangement = Arrangement.spacedBy(6.dp)
+            ) {
+                FastChip(selected = visibility.showAin1, text = "AIN 1 (${ain1.name})", onClick = { onVisibilityChange(visibility.copy(showAin1 = !visibility.showAin1)) })
+                FastChip(selected = visibility.showAin2, text = "AIN 2 (${ain2.name})", onClick = { onVisibilityChange(visibility.copy(showAin2 = !visibility.showAin2)) })
+                FastChip(selected = visibility.showRpm, text = "Шкала RPM", onClick = { onVisibilityChange(visibility.copy(showRpm = !visibility.showRpm)) })
+                FastChip(selected = visibility.showDout, text = "Кнопки DOUT", onClick = { onVisibilityChange(visibility.copy(showDout = !visibility.showDout)) })
+            }
+        }
+
+        Column(
+            modifier = Modifier
+                .fillMaxWidth()
+                .border(1.dp, Color(0xFF2A313D), RoundedCornerShape(8.dp))
+                .padding(12.dp),
+            verticalArrangement = Arrangement.spacedBy(10.dp)
+        ) {
+            Text("КРАСНЫЕ ГРАНИЦЫ НА ПРИБОРКЕ", color = Color(0xFF4FC3F7), fontWeight = FontWeight.Bold, fontSize = 14.sp)
+
+            LimitEditorRow(
+                title = "Температура ОЖ (T_WATR, °C)",
+                limit = limits.tempWat,
+                onChange = { onLimitsChange(limits.copy(tempWat = it)) }
+            )
+            LimitEditorRow(
+                title = "Температура масла (T_OIL, °C)",
+                limit = limits.tempOil,
+                onChange = { onLimitsChange(limits.copy(tempOil = it)) }
+            )
+            LimitEditorRow(
+                title = "Выхлоп (EGT, °C)",
+                limit = limits.egt,
+                onChange = { onLimitsChange(limits.copy(egt = it)) }
+            )
+            LimitEditorRow(
+                title = "AIN 1: ${ain1.name} (${ain1.unit})",
+                limit = limits.ain1,
+                onChange = { onLimitsChange(limits.copy(ain1 = it)) }
+            )
+            LimitEditorRow(
+                title = "AIN 2: ${ain2.name} (${ain2.unit})",
+                limit = limits.ain2,
+                onChange = { onLimitsChange(limits.copy(ain2 = it)) }
+            )
+            LimitEditorRow(
+                title = "Напряжение бортсети (IGN, В)",
+                limit = limits.ign,
+                onChange = { onLimitsChange(limits.copy(ign = it)) }
+            )
+
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DarkTextField(
+                    value = limits.shiftRpm.toString(),
+                    label = "Shift RPM (отсечка)",
+                    isNumber = true,
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { it.toIntOrNull()?.let { v -> onLimitsChange(limits.copy(shiftRpm = v)) } }
+                )
+                DarkTextField(
+                    value = limits.maxRpm.toString(),
+                    label = "Макс. шкала RPM",
+                    isNumber = true,
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { it.toIntOrNull()?.let { v -> onLimitsChange(limits.copy(maxRpm = v)) } }
                 )
             }
         }
-        Text(
-            text = "Выбранная частота сразу записывается во внутреннюю флеш-память nRF52832 (/gps_hz.bin) и применяется при каждом включении зажигания.",
-            color = Color(0xFF90A4AE),
-            fontSize = 13.sp
-        )
+    }
+}
+
+@Composable
+private fun LimitEditorRow(
+    title: String,
+    limit: AlarmLimit,
+    onChange: (AlarmLimit) -> Unit
+) {
+    var minText by remember(limit.min) {
+        mutableStateOf(limit.min?.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() } ?: "")
+    }
+    var maxText by remember(limit.max) {
+        mutableStateOf(limit.max?.let { if (it % 1f == 0f) it.toInt().toString() else it.toString() } ?: "")
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .background(Color(0xFF1E232B), RoundedCornerShape(8.dp))
+            .padding(8.dp),
+        verticalArrangement = Arrangement.spacedBy(6.dp)
+    ) {
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceBetween,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Text(
+                text = title,
+                color = Color.White,
+                fontSize = 12.sp,
+                fontWeight = FontWeight.SemiBold,
+                modifier = Modifier.weight(1f),
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis
+            )
+            FastChip(
+                selected = limit.enabled,
+                text = if (limit.enabled) "ВКЛ" else "ВЫКЛ",
+                fontSize = 11.sp,
+                onClick = { onChange(limit.copy(enabled = !limit.enabled)) }
+            )
+        }
+
+        if (limit.enabled) {
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                DarkTextField(
+                    value = minText,
+                    label = "Мин (если <)",
+                    isNumber = true,
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { txt ->
+                        minText = txt
+                        val parsed = txt.trim().replace(',', '.').toFloatOrNull()
+                        if (txt.isBlank() || parsed != null) {
+                            onChange(limit.copy(min = parsed))
+                        }
+                    }
+                )
+                DarkTextField(
+                    value = maxText,
+                    label = "Макс (если >)",
+                    isNumber = true,
+                    modifier = Modifier.weight(1f),
+                    onValueChange = { txt ->
+                        maxText = txt
+                        val parsed = txt.trim().replace(',', '.').toFloatOrNull()
+                        if (txt.isBlank() || parsed != null) {
+                            onChange(limit.copy(max = parsed))
+                        }
+                    }
+                )
+            }
+        }
+    }
+}
+
+private fun getAppVersionString(context: Context): String {
+    return try {
+        val pInfo = context.packageManager.getPackageInfo(context.packageName, 0)
+        val verName = pInfo.versionName ?: "1.0"
+        val verCode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            pInfo.longVersionCode
+        } else {
+            @Suppress("DEPRECATION")
+            pInfo.versionCode.toLong()
+        }
+        "v$verName ($verCode)"
+    } catch (_: Exception) {
+        "v1.0"
     }
 }
 

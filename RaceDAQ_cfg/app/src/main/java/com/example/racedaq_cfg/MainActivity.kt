@@ -2,6 +2,7 @@ package com.example.racedaq_cfg
 
 import android.Manifest
 import android.content.Context
+import android.content.SharedPreferences
 import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
@@ -57,6 +58,76 @@ object SensorProfileStorage {
             .putFloat("${prefix}_val1", profile.val1)
             .putInt("${prefix}_v2", profile.v2Mv)
             .putFloat("${prefix}_val2", profile.val2)
+            .apply()
+    }
+    private fun SharedPreferences.Editor.putNullableFloat(key: String, value: Float?): SharedPreferences.Editor {
+        return if (value != null) putFloat(key, value) else remove(key)
+    }
+
+    private fun loadLimit(prefs: android.content.SharedPreferences, prefix: String, def: AlarmLimit): AlarmLimit {
+        val enabled = prefs.getBoolean("${prefix}_en", def.enabled)
+        val min = if (prefs.contains("${prefix}_min")) prefs.getFloat("${prefix}_min", 0f) else if (!prefs.contains("${prefix}_en")) def.min else null
+        val max = if (prefs.contains("${prefix}_max")) prefs.getFloat("${prefix}_max", 0f) else if (!prefs.contains("${prefix}_en")) def.max else null
+        return AlarmLimit(enabled = enabled, min = min, max = max)
+    }
+
+    private fun saveLimit(editor: android.content.SharedPreferences.Editor, prefix: String, limit: AlarmLimit) {
+        editor.putBoolean("${prefix}_en", limit.enabled)
+        editor.putNullableFloat("${prefix}_min", limit.min)
+        editor.putNullableFloat("${prefix}_max", limit.max)
+    }
+
+    fun loadAlarmLimits(context: Context): DashboardAlarmLimits {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val def = DashboardAlarmLimits()
+        return DashboardAlarmLimits(
+            tempWat = loadLimit(prefs, "lim_wat", def.tempWat),
+            tempOil = loadLimit(prefs, "lim_oil", def.tempOil),
+            egt = loadLimit(prefs, "lim_egt", def.egt),
+            ain1 = loadLimit(prefs, "lim_ain1", def.ain1),
+            ain2 = loadLimit(prefs, "lim_ain2", def.ain2),
+            ign = loadLimit(prefs, "lim_ign", def.ign),
+            shiftRpm = prefs.getInt("lim_shift_rpm", def.shiftRpm),
+            maxRpm = prefs.getInt("lim_max_rpm", def.maxRpm)
+        )
+    }
+
+    fun saveAlarmLimits(context: Context, limits: DashboardAlarmLimits) {
+        val editor = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+        saveLimit(editor, "lim_wat", limits.tempWat)
+        saveLimit(editor, "lim_oil", limits.tempOil)
+        saveLimit(editor, "lim_egt", limits.egt)
+        saveLimit(editor, "lim_ain1", limits.ain1)
+        saveLimit(editor, "lim_ain2", limits.ain2)
+        saveLimit(editor, "lim_ign", limits.ign)
+        editor.putInt("lim_shift_rpm", limits.shiftRpm)
+        editor.putInt("lim_max_rpm", limits.maxRpm)
+        editor.apply()
+    }
+    fun loadDashboardVisibility(context: Context): DashboardVisibility {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        return DashboardVisibility(
+            showRpm = prefs.getBoolean("vis_rpm", true),
+            showTempWat = prefs.getBoolean("vis_wat", true),
+            showTempOil = prefs.getBoolean("vis_oil", true),
+            showEgt = prefs.getBoolean("vis_egt", true),
+            showAin1 = prefs.getBoolean("vis_ain1", true),
+            showAin2 = prefs.getBoolean("vis_ain2", true),
+            showGps = prefs.getBoolean("vis_gps", true),
+            showDout = prefs.getBoolean("vis_dout", true)
+        )
+    }
+
+    fun saveDashboardVisibility(context: Context, vis: DashboardVisibility) {
+        context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE).edit()
+            .putBoolean("vis_rpm", vis.showRpm)
+            .putBoolean("vis_wat", vis.showTempWat)
+            .putBoolean("vis_oil", vis.showTempOil)
+            .putBoolean("vis_egt", vis.showEgt)
+            .putBoolean("vis_ain1", vis.showAin1)
+            .putBoolean("vis_ain2", vis.showAin2)
+            .putBoolean("vis_gps", vis.showGps)
+            .putBoolean("vis_dout", vis.showDout)
             .apply()
     }
 }
@@ -172,6 +243,12 @@ private fun RaceDaqApp(
             )
         )
     }
+    var alarmLimits by remember {
+        mutableStateOf(SensorProfileStorage.loadAlarmLimits(context))
+    }
+    var dashboardVisibility by remember {
+        mutableStateOf(SensorProfileStorage.loadDashboardVisibility(context))
+    }
 
     val telemetry by bleManager.telemetry.collectAsState()
     val sysConfig by bleManager.config.collectAsState()
@@ -185,6 +262,8 @@ private fun RaceDaqApp(
             currentGpsHz = gpsHz,
             ain1Profile = ain1Profile,
             ain2Profile = ain2Profile,
+            alarmLimits = alarmLimits,
+            visibility = dashboardVisibility,
             deviceInfo = deviceInfo,
             onSaveSystemConfig = { newCfg ->
                 bleManager.writeSystemConfig(newCfg)
@@ -194,6 +273,14 @@ private fun RaceDaqApp(
                 ain2Profile = newAin2
                 SensorProfileStorage.saveProfile(context, "ain1", newAin1)
                 SensorProfileStorage.saveProfile(context, "ain2", newAin2)
+            },
+            onSaveAlarmLimits = { newLimits ->
+                alarmLimits = newLimits
+                SensorProfileStorage.saveAlarmLimits(context, newLimits)
+            },
+            onSaveVisibility = { newVis ->
+                dashboardVisibility = newVis
+                SensorProfileStorage.saveDashboardVisibility(context, newVis)
             },
             onSetGpsRate = { hz ->
                 bleManager.setGpsRate(hz)
@@ -206,6 +293,8 @@ private fun RaceDaqApp(
             config = sysConfig,
             ain1Profile = ain1Profile,
             ain2Profile = ain2Profile,
+            alarmLimits = alarmLimits,
+            visibility = dashboardVisibility,
             deviceInfo = deviceInfo,
             onToggleDout = { channel, enable ->
                 bleManager.toggleDout(channel, enable)
