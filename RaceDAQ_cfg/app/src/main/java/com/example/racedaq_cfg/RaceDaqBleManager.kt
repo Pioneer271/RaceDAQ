@@ -14,6 +14,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
 import java.util.UUID
+import com.example.racedaq_cfg.bridge.RaceGpsBridgeService
 
 @SuppressLint("MissingPermission")
 class RaceDaqBleManager(private val context: Context) {
@@ -27,7 +28,10 @@ class RaceDaqBleManager(private val context: Context) {
         val CHAR_SYS_CONFIG: UUID  = UUID.fromString("00000008-0000-1000-8000-00805f9b34fb")
         val CHAR_DEVICE_INFO: UUID = UUID.fromString("00000009-0000-1000-8000-00805f9b34fb")
         val CCCD_UUID: UUID        = UUID.fromString("00002902-0000-1000-8000-00805f9b34fb")
+        val NUS_SERVICE_UUID: UUID = UUID.fromString("6e400001-b5a3-f393-e0a9-e50e24dcca9e")
+        val NUS_TX_UUID: UUID      = UUID.fromString("6e400003-b5a3-f393-e0a9-e50e24dcca9e")
     }
+
 
     private val btAdapter: BluetoothAdapter? =
         (context.getSystemService(Context.BLUETOOTH_SERVICE) as BluetoothManager).adapter
@@ -137,7 +141,10 @@ class RaceDaqBleManager(private val context: Context) {
             val name = result.device.name ?: result.scanRecord?.deviceName ?: ""
             val hasUuid = result.scanRecord?.serviceUuids?.contains(ParcelUuid(SERVICE_UUID)) == true
 
-            if (name.contains("RACEDAQ", ignoreCase = true) || hasUuid) {
+            if (name.contains("RACEDAQ", ignoreCase = true) ||
+                name.contains("RaceBox", ignoreCase = true) ||
+                hasUuid
+            ) {
                 connectToDevice(result.device, withScanFallback = false)
             }
         }
@@ -172,10 +179,14 @@ class RaceDaqBleManager(private val context: Context) {
 
         override fun onServicesDiscovered(g: BluetoothGatt, status: Int) {
             if (status != BluetoothGatt.GATT_SUCCESS) return
-            val svc = g.getService(SERVICE_UUID) ?: return
             notifyQueue.clear()
-            svc.getCharacteristic(CHAR_CAN_MAIN)?.let { notifyQueue.add(it) }
-            svc.getCharacteristic(CHAR_GPS_MAIN)?.let { notifyQueue.add(it) }
+            g.getService(SERVICE_UUID)?.let { svc ->
+                svc.getCharacteristic(CHAR_CAN_MAIN)?.let { notifyQueue.add(it) }
+                svc.getCharacteristic(CHAR_GPS_MAIN)?.let { notifyQueue.add(it) }
+            }
+            g.getService(NUS_SERVICE_UUID)?.getCharacteristic(NUS_TX_UUID)?.let {
+                notifyQueue.add(it)
+            }
             enableNextNotification(g)
         }
 
@@ -256,7 +267,11 @@ class RaceDaqBleManager(private val context: Context) {
     private fun handleCharacteristicChanged(uuid: UUID, value: ByteArray) {
         when (uuid) {
             CHAR_CAN_MAIN -> _telemetry.update { TelemetryParser.parseCanPacket(value, it) }
-            CHAR_GPS_MAIN -> _telemetry.update { TelemetryParser.parseGpsPacket(value, it) }
+            CHAR_GPS_MAIN -> {
+                _telemetry.update { TelemetryParser.parseGpsPacket(value, it) }
+                RaceGpsBridgeService.onDiyGpsPacket(value)
+            }
+            NUS_TX_UUID -> RaceGpsBridgeService.onRaceBoxPacket(value)
         }
     }
 

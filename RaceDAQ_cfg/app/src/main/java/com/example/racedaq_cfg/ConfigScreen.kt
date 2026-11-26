@@ -28,6 +28,7 @@ import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import kotlin.math.abs
+import com.example.racedaq_cfg.bridge.GpsBridgeCard
 
 @Composable
 fun ConfigScreen(
@@ -1114,6 +1115,9 @@ private fun SystemTab(
             .verticalScroll(rememberScrollState()),
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
+        // ДОБАВЛЕНО: Сервис фиктивных местоположений для бесплатного RaceChrono
+        GpsBridgeCard()
+
         Column(
             modifier = Modifier
                 .fillMaxWidth()

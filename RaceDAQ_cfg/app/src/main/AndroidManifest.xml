@@ -15,6 +15,16 @@
         tools:targetApi="31" />
     <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
 
+    <!-- ДОБАВЛЕНО: права для Mock Location и фонового GPS-моста -->
+    <uses-permission
+        android:name="android.permission.ACCESS_MOCK_LOCATION"
+        tools:ignore="MockLocation" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_CONNECTED_DEVICE" />
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+    <uses-permission android:name="android.permission.WAKE_LOCK" />
+
     <uses-feature
         android:name="android.hardware.bluetooth_le"
         android:required="true" />
@@ -28,6 +38,7 @@
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
         android:theme="@style/Theme.RaceDAQ_cfg">
+
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -37,10 +48,17 @@
             android:configChanges="orientation|screenSize|screenLayout|keyboardHidden">
             <intent-filter>
                 <action android:name="android.intent.action.MAIN" />
-
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- ДОБАВЛЕНО: регистрация фонового сервиса GPS-моста -->
+        <service
+            android:name=".bridge.RaceGpsBridgeService"
+            android:enabled="true"
+            android:exported="false"
+            android:foregroundServiceType="connectedDevice|location" />
+
     </application>
 
 </manifest>
